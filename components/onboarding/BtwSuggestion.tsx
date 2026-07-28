@@ -30,6 +30,7 @@ export function BtwSuggestion({
   const [loading, setLoading] = useState(false);
   const [suggestie, setSuggestie] = useState<Suggestie | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [touched, setTouched] = useState(false);
 
   async function bepaal() {
     if (activiteiten.trim().length < 3) {
@@ -46,10 +47,12 @@ export function BtwSuggestion({
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "Kon geen BTW-tarief bepalen.");
+        setError(json.error ?? "Kon geen BTW-tarief bepalen. Kies hieronder handmatig.");
+        setTouched(true);
         return;
       }
       setSuggestie(json.data);
+      setTouched(true);
       onChange({ percentage: json.data.percentage, vrijgesteld: json.data.vrijgesteld });
     } finally {
       setLoading(false);
@@ -58,7 +61,7 @@ export function BtwSuggestion({
 
   return (
     <div className="mb-5">
-      {!suggestie && (
+      {!touched && (
         <Button type="button" variant="secondary" onClick={bepaal} loading={loading} className="w-full justify-center">
           <Sparkles size={15} />
           Bepaal mijn BTW-tarief
@@ -73,14 +76,21 @@ export function BtwSuggestion({
 
       {error && <p className="mt-2 text-xs text-stamp">{error}</p>}
 
-      {suggestie && (
+      {touched && !loading && (
         <div className="slide-down mt-3 rounded-md border border-line bg-paper-dark p-3.5">
-          <p className="text-[13px] leading-relaxed text-ink">
-            Op basis van je activiteiten verwachten we dat je meestal{" "}
-            <strong>{value.vrijgesteld ? "vrijgesteld van BTW" : `${value.percentage}% BTW`}</strong> rekent. Klopt
-            dit?
-          </p>
-          <p className="mt-1.5 text-xs leading-relaxed text-muted">{suggestie.toelichting}</p>
+          {suggestie && (
+            <>
+              <p className="text-[13px] leading-relaxed text-ink">
+                Op basis van je activiteiten verwachten we dat je meestal{" "}
+                <strong>{value.vrijgesteld ? "vrijgesteld van BTW" : `${value.percentage}% BTW`}</strong> rekent.
+                Klopt dit?
+              </p>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted">{suggestie.toelichting}</p>
+            </>
+          )}
+          {!suggestie && (
+            <p className="text-[13px] leading-relaxed text-ink">Kies het BTW-tarief dat het best bij je past.</p>
+          )}
           <div className="mt-3 flex gap-2">
             {OPTIES.map((opt) => (
               <button
