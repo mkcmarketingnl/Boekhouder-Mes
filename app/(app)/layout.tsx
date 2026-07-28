@@ -1,0 +1,43 @@
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { Receipt } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { SignOutButton } from "@/components/SignOutButton";
+import { FooterDisclaimer } from "@/components/ui/Disclaimer";
+
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("voornaam")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!profile) {
+    redirect("/onboarding");
+  }
+
+  return (
+    <div className="flex min-h-screen flex-col">
+      <header className="safe-top border-b border-line bg-paper/95 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <Receipt size={18} className="text-stamp" />
+            <span className="mono text-[12px] uppercase tracking-wide text-muted">Boekhouder Mes</span>
+          </Link>
+          <SignOutButton />
+        </div>
+      </header>
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+      <FooterDisclaimer />
+    </div>
+  );
+}

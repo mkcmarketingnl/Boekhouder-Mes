@@ -1,36 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Boekhouder Mes
 
-## Getting Started
+Productie-webapp voor zelfstandig ondernemers (ZZP/eenmanszaak/VOF/BV) om hun eigen boekhouding
+bij te houden zonder externe boekhouder. Geen officiële belastingaangifte, geen vervanging van
+een boekhouder — een hulpmiddel voor overzicht, automatische BTW-indicatie en AI-inzichten op
+basis van geüploade facturen/bonnen.
 
-First, run the development server:
+**Status:** Fase A afgerond — project setup, volledige Supabase Auth-flow (registratie, login,
+wachtwoord-reset, e-mailbevestiging) en onboarding met automatische BTW-tariefsuggestie. Het
+scannen van facturen/bonnen, dashboard en AI-tips volgen in Fase B.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Setup
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1. **Dependencies installeren**
+   ```bash
+   npm install
+   ```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+2. **Supabase-project aanmaken** op [supabase.com](https://supabase.com), en:
+   - Voer de migratie uit: kopieer de inhoud van `supabase/migrations/0001_init.sql` naar de
+     Supabase SQL editor en run deze. Dit maakt alle tabellen, enums, RLS-policies en de
+     `documents` storage-bucket aan.
+   - Ga naar **Authentication → URL Configuration** en zet de Site URL + Redirect URLs op je
+     lokale/productie-URL (bijv. `http://localhost:3000/**`) zodat bevestigings- en
+     reset-e-mails naar de juiste plek linken.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3. **Environment variables**: kopieer `.env.example` naar `.env.local` en vul in:
+   - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase → Settings → API
+   - `ANTHROPIC_API_KEY` — [console.anthropic.com](https://console.anthropic.com/)
+   - `NEXT_PUBLIC_SITE_URL` — `http://localhost:3000` lokaal, je echte domein in productie
 
-## Learn More
+4. **Dev server starten**
+   ```bash
+   npm run dev
+   ```
+   Open [http://localhost:3000](http://localhost:3000).
 
-To learn more about Next.js, take a look at the following resources:
+## Belangrijk
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Deze applicatie doet geen belastingaangifte en is geen vervanging voor een boekhouder of
+fiscalist. Alle AI-output rond BTW en aftrekbaarheid is een indicatie, geen garantie.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Tech stack
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · Supabase (Postgres, Auth, Storage) ·
+Anthropic Claude (vision-extractie, BTW-tariefsuggestie, tips) · Recharts
