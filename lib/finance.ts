@@ -103,7 +103,9 @@ export function groupMonthlyTrend(transactions: Transaction[], monthsCount = 6):
 }
 
 export function btwUitlegzin(btwSaldo: number, periodeLabel: string): string {
-  const bedrag = formatCurrencyPlain(Math.abs(btwSaldo));
+  const bedrag = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(
+    Math.abs(btwSaldo)
+  );
   if (btwSaldo > 0) {
     return `Op basis van je facturen in ${periodeLabel} verwachten we dat je ongeveer ${bedrag} moet afdragen.`;
   }
@@ -111,8 +113,4 @@ export function btwUitlegzin(btwSaldo: number, periodeLabel: string): string {
     return `Op basis van je facturen in ${periodeLabel} verwachten we dat je ongeveer ${bedrag} kunt terugvragen.`;
   }
   return `Op basis van je facturen in ${periodeLabel} verwachten we vooralsnog geen BTW-saldo.`;
-}
-
-function formatCurrencyPlain(amount: number): string {
-  return new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(amount);
 }
