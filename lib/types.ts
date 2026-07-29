@@ -6,6 +6,18 @@ export type RisicoNiveau = "laag" | "midden" | "hoog";
 export type Invoerwijze = "ai" | "handmatig";
 export type Leesbaarheid = "goed" | "slecht";
 
+export interface Billing {
+  user_id: string;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  subscription_status: string | null;
+  price_id: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  is_comped: boolean;
+  updated_at: string;
+}
+
 export const CATEGORIE_OPTIES = [
   "Kantoorbenodigdheden",
   "Software/abonnementen",

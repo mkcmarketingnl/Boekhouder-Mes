@@ -2,14 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { siteUrl } from "@/lib/site";
 
 export interface AuthState {
   error?: string;
   message?: string;
-}
-
-function siteUrl() {
-  return process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 }
 
 export async function signIn(_prevState: AuthState, formData: FormData): Promise<AuthState> {

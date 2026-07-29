@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Receipt } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAccessStatus } from "@/lib/subscription";
 import { SignOutButton } from "@/components/SignOutButton";
 import { FooterDisclaimer } from "@/components/ui/Disclaimer";
 
@@ -25,6 +26,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect("/onboarding");
   }
 
+  const { hasAccess } = await getAccessStatus(user.id);
+  if (!hasAccess) {
+    redirect("/abonnement");
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="safe-top border-b border-line bg-paper/95 backdrop-blur">
@@ -33,7 +39,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Receipt size={18} className="text-stamp" />
             <span className="mono text-[12px] uppercase tracking-wide text-muted">Boekhouder Mes</span>
           </Link>
-          <SignOutButton />
+          <div className="flex items-center gap-4">
+            <Link href="/abonnement" className="text-xs text-muted underline">
+              Abonnement
+            </Link>
+            <SignOutButton />
+          </div>
         </div>
       </header>
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6 sm:py-8">{children}</main>
