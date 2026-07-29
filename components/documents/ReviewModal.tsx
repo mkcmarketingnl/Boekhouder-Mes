@@ -139,8 +139,13 @@ export function ReviewModal({ documentId, extracted, userId, defaultBtwPercentag
           </Field>
         )}
 
-        <Field label="Omschrijving">
-          <Textarea rows={2} value={omschrijving ?? ""} onChange={(e) => setOmschrijving(e.target.value)} />
+        <Field label="Omschrijving (reden van kosten)">
+          <Textarea
+            rows={2}
+            value={omschrijving ?? ""}
+            onChange={(e) => setOmschrijving(e.target.value)}
+            placeholder="Waarom heb je dit gekocht? Handig om later terug te lezen."
+          />
         </Field>
 
         {error && <p className="mb-3 text-sm text-stamp">{error}</p>}

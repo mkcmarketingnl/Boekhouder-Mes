@@ -123,8 +123,13 @@ export function ManualEntryModal({
           </Field>
         )}
 
-        <Field label="Omschrijving (optioneel)">
-          <Textarea rows={2} value={omschrijving} onChange={(e) => setOmschrijving(e.target.value)} />
+        <Field label="Omschrijving (reden van kosten) (optioneel)">
+          <Textarea
+            rows={2}
+            value={omschrijving}
+            onChange={(e) => setOmschrijving(e.target.value)}
+            placeholder="Bijv. nieuwe laptop voor kantoor — handig om later terug te lezen waarom je dit hebt gekocht"
+          />
         </Field>
 
         {error && <p className="mb-3 text-sm text-stamp">{error}</p>}
