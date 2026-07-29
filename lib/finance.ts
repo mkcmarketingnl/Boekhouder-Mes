@@ -6,6 +6,11 @@ import {
   startOfYear,
   endOfYear,
   subMonths,
+  addMonths,
+  addQuarters,
+  subQuarters,
+  addYears,
+  subYears,
   eachMonthOfInterval,
   format,
 } from "date-fns";
@@ -40,6 +45,18 @@ export function getPeriodBounds(type: PeriodType, reference: Date = new Date()) 
 
 export function defaultPeriodType(tijdvak: Aangiftetijdvak): PeriodType {
   return tijdvak;
+}
+
+export function shiftPeriod(reference: Date, type: PeriodType, direction: 1 | -1): Date {
+  switch (type) {
+    case "maand":
+      return direction === 1 ? addMonths(reference, 1) : subMonths(reference, 1);
+    case "jaar":
+      return direction === 1 ? addYears(reference, 1) : subYears(reference, 1);
+    case "kwartaal":
+    default:
+      return direction === 1 ? addQuarters(reference, 1) : subQuarters(reference, 1);
+  }
 }
 
 export interface FinancialSnapshot {

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { UploadFlow } from "@/components/documents/UploadFlow";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { PeriodSelector } from "@/components/dashboard/PeriodSelector";
+import { PeriodNav } from "@/components/dashboard/PeriodNav";
 import { RevenueChart } from "@/components/dashboard/RevenueChart";
 import { ReceiptRow } from "@/components/dashboard/ReceiptRow";
 import { DASHBOARD_DISCLAIMER } from "@/components/ui/Disclaimer";
@@ -15,9 +16,9 @@ import type { Profile, Transaction } from "@/lib/types";
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ periode?: string }>;
+  searchParams: Promise<{ periode?: string; ref?: string }>;
 }) {
-  const { periode } = await searchParams;
+  const { periode, ref } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -34,7 +35,10 @@ export default async function DashboardPage({
     ? (periode as PeriodType)
     : profile.aangiftetijdvak;
 
-  const { start, end, label } = getPeriodBounds(periodType);
+  const reference = ref && !isNaN(Date.parse(ref)) ? new Date(ref) : new Date();
+
+  const { start, end, label } = getPeriodBounds(periodType, reference);
+  const isCurrentPeriod = start.getTime() === getPeriodBounds(periodType, new Date()).start.getTime();
   const trendStart = subMonths(new Date(), 5);
 
   const [{ data: periodTransactions }, { data: trendTransactions }] = await Promise.all([
@@ -43,20 +47,14 @@ export default async function DashboardPage({
       .select("*")
       .eq("user_id", user!.id)
       .gte("factuurdatum", formatDateInput(start))
-      .lte("factuurdatum", formatDateInput(end)),
+      .lte("factuurdatum", formatDateInput(end))
+      .order("factuurdatum", { ascending: false }),
     supabase.from("transactions").select("*").eq("user_id", user!.id).gte("factuurdatum", formatDateInput(trendStart)),
   ]);
 
-  const { data: recentTransactions } = await supabase
-    .from("transactions")
-    .select("*")
-    .eq("user_id", user!.id)
-    .order("created_at", { ascending: false })
-    .limit(10);
-
   const snapshot = aggregateTransactions((periodTransactions ?? []) as Transaction[]);
   const trend = groupMonthlyTrend((trendTransactions ?? []) as Transaction[]);
-  const rows = (recentTransactions ?? []) as Transaction[];
+  const rows = (periodTransactions ?? []) as Transaction[];
 
   return (
     <div className="fade-in space-y-6">
@@ -74,9 +72,12 @@ export default async function DashboardPage({
         {DASHBOARD_DISCLAIMER}
       </p>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <PeriodSelector active={periodType} />
-        <p className="text-xs text-muted">{label}</p>
+        <div className="flex items-center gap-1">
+          <PeriodNav periodType={periodType} reference={reference} />
+          <p className="min-w-[7rem] text-right text-xs text-muted">{label}</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -96,15 +97,19 @@ export default async function DashboardPage({
       <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
         <RevenueChart data={trend} />
         <div>
-          <h2 className="display mb-3 text-[15px] font-semibold">Geüploade documenten</h2>
+          <h2 className="display mb-3 text-[15px] font-semibold">
+            Documenten {isCurrentPeriod ? "" : `— ${label}`}
+          </h2>
           {rows.length === 0 ? (
             <div className="rounded-md border border-dashed border-line px-5 py-8 text-center text-[13px] text-muted">
-              Nog niets geüpload. Scan je eerste bon of factuur om te beginnen.
+              {isCurrentPeriod
+                ? "Nog niets geüpload. Scan je eerste bon of factuur om te beginnen."
+                : "Geen transacties in deze periode."}
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
               {rows.map((t, i) => (
-                <ReceiptRow key={t.id} t={t} isNew={i === 0} />
+                <ReceiptRow key={t.id} t={t} isNew={isCurrentPeriod && i === 0} />
               ))}
             </div>
           )}

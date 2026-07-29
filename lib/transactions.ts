@@ -52,3 +52,14 @@ export async function saveTransaction(
 
   return { error: null };
 }
+
+export async function deleteTransaction(transactionId: string): Promise<{ error: string | null }> {
+  const supabase = createClient();
+  const { error } = await supabase.from("transactions").delete().eq("id", transactionId);
+
+  if (error) {
+    return { error: "Verwijderen is mislukt. Probeer het opnieuw." };
+  }
+
+  return { error: null };
+}
