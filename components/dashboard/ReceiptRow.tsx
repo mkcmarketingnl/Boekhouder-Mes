@@ -9,7 +9,15 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { deleteTransaction } from "@/lib/transactions";
 import type { Transaction } from "@/lib/types";
 
-export function ReceiptRow({ t, isNew }: { t: Transaction; isNew?: boolean }) {
+export function ReceiptRow({
+  t,
+  isNew,
+  onOpenDetail,
+}: {
+  t: Transaction;
+  isNew?: boolean;
+  onOpenDetail?: () => void;
+}) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -49,7 +57,11 @@ export function ReceiptRow({ t, isNew }: { t: Transaction; isNew?: boolean }) {
   }
 
   return (
-    <div className={`card-hover group overflow-hidden rounded-md border border-line bg-white ${isNew ? "pop-in" : ""}`}>
+    <button
+      type="button"
+      onClick={onOpenDetail}
+      className={`card-hover group w-full overflow-hidden rounded-md border border-line bg-white text-left ${isNew ? "pop-in" : ""}`}
+    >
       <div className="flex items-start justify-between gap-3 p-3.5">
         <div className="min-w-0">
           <div className="truncate text-[13.5px] font-semibold text-ink">{t.leverancier}</div>
@@ -70,16 +82,26 @@ export function ReceiptRow({ t, isNew }: { t: Transaction; isNew?: boolean }) {
               <StatusBadge risico={t.risico} />
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setConfirming(true)}
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              setConfirming(true);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.stopPropagation();
+                setConfirming(true);
+              }
+            }}
             aria-label="Verwijderen"
             className="-mr-1.5 -mt-1 flex min-h-11 min-w-11 items-center justify-center text-muted hover:text-stamp"
           >
             <X size={16} />
-          </button>
+          </span>
         </div>
       </div>
-    </div>
+    </button>
   );
 }

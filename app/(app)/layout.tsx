@@ -28,20 +28,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { hasAccess } = await getAccessStatus(user.id);
   if (!hasAccess) {
-    redirect("/abonnement");
+    redirect("/account");
   }
 
   return (
     <div className="flex min-h-screen flex-col">
       <header className="safe-top border-b border-line bg-paper/95 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <Receipt size={18} className="text-stamp" />
-            <span className="mono text-[12px] uppercase tracking-wide text-muted">Boekhouder Mes</span>
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 py-3 sm:px-6">
+          <Link href="/dashboard" className="flex min-w-0 items-center gap-2">
+            <Receipt size={18} className="shrink-0 text-stamp" />
+            <span className="mono truncate text-[11px] uppercase tracking-wide text-muted sm:text-[12px]">
+              Boekhouder Mes
+            </span>
           </Link>
-          <div className="flex items-center gap-4">
-            <Link href="/abonnement" className="text-xs text-muted underline">
-              Abonnement
+          <div className="flex shrink-0 items-center gap-3 sm:gap-4">
+            <Link href="/account" className="min-h-11 content-center text-xs text-muted underline">
+              Account
             </Link>
             <SignOutButton />
           </div>

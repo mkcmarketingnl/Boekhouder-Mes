@@ -100,5 +100,4 @@ export interface AiTip {
   gegenereerd_op: string;
   tip_tekst: string;
   context_snapshot: Record<string, unknown> | null;
-  created_at: string;
 }

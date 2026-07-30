@@ -25,8 +25,8 @@ export async function startCheckout() {
     customer: billing?.stripe_customer_id ?? undefined,
     customer_email: billing?.stripe_customer_id ? undefined : user.email,
     client_reference_id: user.id,
-    success_url: `${siteUrl()}/abonnement?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${siteUrl()}/abonnement`,
+    success_url: `${siteUrl()}/account?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${siteUrl()}/account`,
   });
 
   redirect(session.url!);
@@ -46,13 +46,13 @@ export async function openBillingPortal() {
     .maybeSingle();
 
   if (!billing?.stripe_customer_id) {
-    redirect("/abonnement");
+    redirect("/account");
   }
 
   const stripe = getStripeClient();
   const portalSession = await stripe.billingPortal.sessions.create({
     customer: billing.stripe_customer_id,
-    return_url: `${siteUrl()}/abonnement`,
+    return_url: `${siteUrl()}/account`,
   });
 
   redirect(portalSession.url);

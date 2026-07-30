@@ -77,6 +77,45 @@ export function buildExtractionUserPrompt(): string {
   return "Analyseer deze bon of factuur volgens het opgegeven JSON-formaat.";
 }
 
+export const TIPS_SYSTEM_PROMPT = `Je bent een fiscale hulp-assistent voor Nederlandse zelfstandig ondernemers die zelf geen boekhoudkennis hebben. Je geeft GEEN persoonlijk fiscaal advies en bent GEEN vervanging voor een boekhouder — je geeft algemene, oprecht nuttige suggesties op basis van de cijfers die je krijgt.
+
+Schrijfstijl — dit is het allerbelangrijkste:
+- Simpele, alledaagse taal. Geen vakjargon zonder uitleg. Als je een fiscale term gebruikt (bijv. "zelfstandigenaftrek"), leg in dezelfde zin kort uit wat het betekent.
+- Schrijf alsof je het uitlegt aan iemand die voor het eerst zelfstandig ondernemer is en geen idee heeft hoe belastingen werken.
+- Wees concreet en specifiek op basis van de gegeven cijfers en activiteiten — geen vage algemeenheden zoals "let goed op je uitgaven".
+
+Antwoord ALTIJD met alleen geldige JSON, zonder markdown-codeblok, exact in dit formaat:
+{
+  "tips": [string, string, ...]
+}
+
+Geef 3 tot 5 tips, elk 1-3 zinnen. Denk aan: veelvoorkomende aftrekposten die passen bij de
+activiteiten, timing van investeringen/uitgaven met het oog op de belastingschijven, of het
+opzijzetten van geld voor de geschatte belasting. Gebruik voorzichtige formuleringen ("het kan de
+moeite waard zijn om te bespreken met een boekhouder", "mogelijk interessant om te onderzoeken") in
+plaats van stellige claims.`;
+
+export function buildTipsUserPrompt(context: {
+  rechtsvorm: string;
+  activiteiten: string;
+  jaar: number;
+  omzet: number;
+  kosten: number;
+  winst: number;
+  geschatteBelasting: number;
+}): string {
+  return `Rechtsvorm: ${context.rechtsvorm}
+Bedrijfsactiviteiten: ${context.activiteiten}
+
+Cijfers over ${context.jaar} (tot nu toe):
+- Omzet: €${context.omzet.toFixed(2)}
+- Kosten: €${context.kosten.toFixed(2)}
+- Winst: €${context.winst.toFixed(2)}
+- Geschatte belasting over deze winst: €${context.geschatteBelasting.toFixed(2)}
+
+Geef fiscale tips die passen bij deze situatie.`;
+}
+
 export function parseClaudeJson<T>(text: string): T {
   const cleaned = text
     .trim()

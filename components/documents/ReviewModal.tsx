@@ -16,11 +16,22 @@ interface Props {
   extracted: ExtractedInvoiceData | null;
   userId: string;
   defaultBtwPercentage: number;
+  queuePosition?: number;
+  queueTotal?: number;
   onClose: () => void;
   onSaved: (message: string) => void;
 }
 
-export function ReviewModal({ documentId, extracted, userId, defaultBtwPercentage, onClose, onSaved }: Props) {
+export function ReviewModal({
+  documentId,
+  extracted,
+  userId,
+  defaultBtwPercentage,
+  queuePosition,
+  queueTotal,
+  onClose,
+  onSaved,
+}: Props) {
   const [leverancier, setLeverancier] = useState(extracted?.leverancier ?? "");
   const [factuurnummer, setFactuurnummer] = useState(extracted?.factuurnummer ?? "");
   const [factuurdatum, setFactuurdatum] = useState(extracted?.factuurdatum ?? "");
@@ -72,7 +83,14 @@ export function ReviewModal({ documentId, extracted, userId, defaultBtwPercentag
     <div className="fade-in fixed inset-0 z-50 flex items-end bg-ink/50 sm:items-center sm:justify-center sm:p-4">
       <div className="pop-in safe-bottom safe-top flex h-full w-full flex-col overflow-y-auto bg-paper p-5 sm:h-auto sm:max-h-[88vh] sm:max-w-md sm:rounded-lg sm:border sm:border-line">
         <div className="mb-1 flex items-start justify-between">
-          <h2 className="display text-lg font-semibold">Even checken</h2>
+          <h2 className="display text-lg font-semibold">
+            Even checken
+            {queueTotal && queueTotal > 1 && (
+              <span className="ml-2 text-sm font-normal text-muted">
+                (bon {queuePosition} van {queueTotal})
+              </span>
+            )}
+          </h2>
           <button onClick={onClose} className="-m-2 min-h-11 min-w-11 p-2 text-muted" aria-label="Sluiten">
             <X size={18} />
           </button>

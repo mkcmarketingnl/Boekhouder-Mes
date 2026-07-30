@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { Receipt, Check, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Receipt, Check, Sparkles } from "lucide-react";
 import Stripe from "stripe";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -36,7 +37,7 @@ async function verifyCheckoutSession(sessionId: string, userId: string) {
   return true;
 }
 
-export default async function AbonnementPage({
+export default async function AccountPage({
   searchParams,
 }: {
   searchParams: Promise<{ checkout?: string; session_id?: string }>;
@@ -58,9 +59,17 @@ export default async function AbonnementPage({
 
   return (
     <div className="safe-top safe-bottom mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-10">
-      <div className="fade-up mb-6 flex items-center gap-2.5">
-        <Receipt size={20} className="text-stamp" />
-        <span className="mono text-[13px] uppercase tracking-wide text-muted">Boekhouder Mes</span>
+      <div className="fade-up mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <Receipt size={20} className="text-stamp" />
+          <span className="mono text-[13px] uppercase tracking-wide text-muted">Boekhouder Mes</span>
+        </div>
+        {hasAccess && (
+          <Link href="/dashboard" className="flex min-h-11 items-center gap-1 text-xs text-muted underline">
+            <ArrowLeft size={14} />
+            Dashboard
+          </Link>
+        )}
       </div>
 
       {billing?.is_comped && (
@@ -74,7 +83,7 @@ export default async function AbonnementPage({
 
       {!billing?.is_comped && hasAccess && (
         <Card className="fade-up p-6">
-          <h1 className="display mb-1 text-xl font-semibold">Je abonnement</h1>
+          <h1 className="display mb-1 text-xl font-semibold">Mijn account</h1>
           <p className="mb-4 text-sm text-muted">€25 per maand</p>
           <div className="mb-5 space-y-2 rounded-md border border-line bg-paper-dark p-3.5 text-[13px]">
             <div className="flex justify-between">

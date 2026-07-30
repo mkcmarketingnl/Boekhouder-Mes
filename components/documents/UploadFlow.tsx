@@ -22,10 +22,10 @@ interface PendingReview {
 
 export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; defaultBtwPercentage: number }) {
   const router = useRouter();
-  const [scanning, setScanning] = useState(false);
+  const [processingCount, setProcessingCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastData | null>(null);
-  const [pendingReview, setPendingReview] = useState<PendingReview | null>(null);
+  const [reviewQueue, setReviewQueue] = useState<PendingReview[]>([]);
   const [manualOpen, setManualOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -35,90 +35,114 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
     setTimeout(() => setToast(null), 3200);
   }, []);
 
-  const handleFile = useCallback(
-    async (file: File) => {
-      setError(null);
+  const processOneFile = useCallback(
+    async (file: File): Promise<PendingReview | null> => {
       if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-        setError(`Bestand is te groot (max ${MAX_SIZE_MB}MB).`);
-        return;
+        throw new Error(`${file.name}: bestand is te groot (max ${MAX_SIZE_MB}MB).`);
       }
 
-      setScanning(true);
-      try {
-        const uploadFile = await prepareUploadFile(file);
-        const supabase = createClient();
-        const ext = uploadFile.name.split(".").pop()?.toLowerCase() ?? "jpg";
-        const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+      const uploadFile = await prepareUploadFile(file);
+      const supabase = createClient();
+      const ext = uploadFile.name.split(".").pop()?.toLowerCase() ?? "jpg";
+      const path = `${userId}/${crypto.randomUUID()}.${ext}`;
 
-        const { error: uploadError } = await supabase.storage
-          .from("documents")
-          .upload(path, uploadFile, { contentType: uploadFile.type });
-        if (uploadError) throw new Error("Upload mislukt.");
+      const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(path, uploadFile, { contentType: uploadFile.type });
+      if (uploadError) throw new Error(`${file.name}: upload mislukt.`);
 
-        const { data: doc, error: insertError } = await supabase
-          .from("documents")
-          .insert({ user_id: userId, file_url: path })
-          .select()
-          .single();
-        if (insertError || !doc) throw new Error("Document kon niet worden aangemaakt.");
+      const { data: doc, error: insertError } = await supabase
+        .from("documents")
+        .insert({ user_id: userId, file_url: path })
+        .select()
+        .single();
+      if (insertError || !doc) throw new Error(`${file.name}: document kon niet worden aangemaakt.`);
 
-        const res = await fetch("/api/documents/extract", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ documentId: doc.id }),
+      const res = await fetch("/api/documents/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: doc.id }),
+      });
+      const json = await res.json();
+      const extracted: ExtractedInvoiceData | null = json?.data ?? null;
+
+      const autoSaveOk = extracted && extracted.leesbaarheid === "goed" && extracted.risico === "laag";
+
+      if (autoSaveOk && extracted) {
+        const { error: saveError } = await saveTransaction(userId, {
+          document_id: doc.id,
+          factuurnummer: extracted.factuurnummer,
+          factuurdatum: extracted.factuurdatum ?? new Date().toISOString().slice(0, 10),
+          leverancier: extracted.leverancier ?? "Onbekend",
+          omschrijving: extracted.omschrijving,
+          bedrag_incl_btw: extracted.bedrag_incl_btw ?? 0,
+          btw_percentage: extracted.btw_percentage ?? defaultBtwPercentage,
+          type: extracted.type ?? "kosten",
+          categorie: extracted.voorgestelde_categorie ?? "Overig",
+          risico: extracted.risico,
+          risico_toelichting: extracted.risico_toelichting,
+          invoerwijze: "ai",
         });
-        const json = await res.json();
-        const extracted: ExtractedInvoiceData | null = json?.data ?? null;
-
-        const autoSaveOk = extracted && extracted.leesbaarheid === "goed" && extracted.risico === "laag";
-
-        if (autoSaveOk && extracted) {
-          const { error: saveError } = await saveTransaction(userId, {
-            document_id: doc.id,
-            factuurnummer: extracted.factuurnummer,
-            factuurdatum: extracted.factuurdatum ?? new Date().toISOString().slice(0, 10),
-            leverancier: extracted.leverancier ?? "Onbekend",
-            omschrijving: extracted.omschrijving,
-            bedrag_incl_btw: extracted.bedrag_incl_btw ?? 0,
-            btw_percentage: extracted.btw_percentage ?? defaultBtwPercentage,
-            type: extracted.type ?? "kosten",
-            categorie: extracted.voorgestelde_categorie ?? "Overig",
-            risico: extracted.risico,
-            risico_toelichting: extracted.risico_toelichting,
-            invoerwijze: "ai",
-          });
-          if (saveError) {
-            setPendingReview({ documentId: doc.id, extracted });
-          } else {
-            showToast(
-              `${extracted.leverancier ?? "Bon"} automatisch herkend en toegevoegd — €${(extracted.bedrag_incl_btw ?? 0).toFixed(2)}`
-            );
-            router.refresh();
-          }
-        } else {
-          setPendingReview({ documentId: doc.id, extracted });
+        if (saveError) {
+          return { documentId: doc.id, extracted };
         }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Er ging iets mis bij het uploaden.");
-      } finally {
-        setScanning(false);
+        showToast(
+          `${extracted.leverancier ?? "Bon"} automatisch herkend en toegevoegd — €${(extracted.bedrag_incl_btw ?? 0).toFixed(2)}`
+        );
+        return null;
       }
+
+      return { documentId: doc.id, extracted };
     },
-    [userId, defaultBtwPercentage, router, showToast]
+    [userId, defaultBtwPercentage, showToast]
   );
+
+  const handleFiles = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+      setError(null);
+      setProcessingCount(files.length);
+
+      const results = await Promise.allSettled(files.map((file) => processOneFile(file)));
+
+      const newlyNeedsReview: PendingReview[] = [];
+      const errors: string[] = [];
+      for (const result of results) {
+        if (result.status === "fulfilled" && result.value) {
+          newlyNeedsReview.push(result.value);
+        } else if (result.status === "rejected") {
+          errors.push(result.reason instanceof Error ? result.reason.message : "Onbekende fout.");
+        }
+      }
+
+      if (errors.length > 0) setError(errors.join(" "));
+      if (newlyNeedsReview.length > 0) {
+        setReviewQueue((prev) => [...prev, ...newlyNeedsReview]);
+      }
+      setProcessingCount(0);
+      router.refresh();
+    },
+    [processOneFile, router]
+  );
+
+  const currentReview = reviewQueue[0] ?? null;
+
+  function advanceQueue() {
+    setReviewQueue((prev) => prev.slice(1));
+  }
 
   return (
     <div>
-      <div className="flex gap-2">
-        <Button type="button" variant="secondary" onClick={() => cameraInputRef.current?.click()} disabled={scanning}>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="secondary" onClick={() => cameraInputRef.current?.click()} disabled={processingCount > 0}>
           <Camera size={15} />
           Camera
         </Button>
-        <Button type="button" onClick={() => fileInputRef.current?.click()} disabled={scanning}>
+        <Button type="button" onClick={() => fileInputRef.current?.click()} disabled={processingCount > 0}>
           <UploadIcon size={15} />
-          Bon uploaden
+          Bonnen uploaden
         </Button>
-        <Button type="button" variant="ghost" onClick={() => setManualOpen(true)} disabled={scanning}>
+        <Button type="button" variant="ghost" onClick={() => setManualOpen(true)} disabled={processingCount > 0}>
           <PenLine size={15} />
           Handmatig
         </Button>
@@ -128,10 +152,11 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
         ref={fileInputRef}
         type="file"
         accept={ACCEPTED}
+        multiple
         className="hidden"
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleFile(file);
+          const files = Array.from(e.target.files ?? []);
+          if (files.length) handleFiles(files);
           e.target.value = "";
         }}
       />
@@ -143,29 +168,33 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) handleFile(file);
+          if (file) handleFiles([file]);
           e.target.value = "";
         }}
       />
 
-      {scanning && (
+      {processingCount > 0 && (
         <div className="scan-frame slide-down mt-4 flex items-center gap-2 rounded-md border border-line bg-paper-dark px-3.5 py-2.5 text-[12.5px] text-ink">
           <Loader2 size={14} className="spin" />
-          Bon wordt automatisch uitgelezen en gecontroleerd...
+          {processingCount === 1
+            ? "Bon wordt automatisch uitgelezen en gecontroleerd..."
+            : `${processingCount} bonnen worden tegelijk uitgelezen en gecontroleerd...`}
         </div>
       )}
 
       {error && <p className="mt-2 text-sm text-stamp">{error}</p>}
 
-      {pendingReview && (
+      {currentReview && (
         <ReviewModal
-          documentId={pendingReview.documentId}
-          extracted={pendingReview.extracted}
+          documentId={currentReview.documentId}
+          extracted={currentReview.extracted}
           userId={userId}
           defaultBtwPercentage={defaultBtwPercentage}
-          onClose={() => setPendingReview(null)}
+          queuePosition={reviewQueue.length > 1 ? 1 : undefined}
+          queueTotal={reviewQueue.length > 1 ? reviewQueue.length : undefined}
+          onClose={advanceQueue}
           onSaved={(message) => {
-            setPendingReview(null);
+            advanceQueue();
             showToast(message);
             router.refresh();
           }}

@@ -15,6 +15,9 @@ export const RISK_WARNING_SUFFIX =
 
 export const BTW_INDICATIE_DISCLAIMER = "Dit is een indicatie, geen officiële BTW-aangifte.";
 
+export const BELASTING_INDICATIE_DISCLAIMER =
+  "Dit is een indicatie op basis van de huidige tarieven, geen officiële belastingaangifte.";
+
 export function FooterDisclaimer() {
   return (
     <footer className="safe-bottom border-t border-line bg-paper-dark px-6 py-4">
