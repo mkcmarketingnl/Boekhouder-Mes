@@ -91,9 +91,11 @@ Antwoord ALTIJD met alleen geldige JSON, zonder markdown-codeblok, exact in dit 
 
 Geef 3 tot 5 tips, elk 1-3 zinnen. Denk aan: veelvoorkomende aftrekposten die passen bij de
 activiteiten, timing van investeringen/uitgaven met het oog op de belastingschijven, of het
-opzijzetten van geld voor de geschatte belasting. Gebruik voorzichtige formuleringen ("het kan de
-moeite waard zijn om te bespreken met een boekhouder", "mogelijk interessant om te onderzoeken") in
-plaats van stellige claims.`;
+opzijzetten van geld voor de geschatte belasting. Wees direct en zelfverzekerd bij tips die
+gebaseerd zijn op algemeen bekende, eenvoudige regels — schrijf dan gewoon wat waar is, zonder
+hedging-taal. Noem het bespreken met een boekhouder ALLEEN in een tip als die specifieke tip echt
+afhangt van persoonlijke omstandigheden die je niet kunt beoordelen, of als het een grijs gebied/
+uitzonderingsgeval betreft — en dan alleen in die ene tip, niet standaard bij elke tip.`;
 
 export function buildTipsUserPrompt(context: {
   rechtsvorm: string;

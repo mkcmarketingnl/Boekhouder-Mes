@@ -4,8 +4,7 @@ export const APP_DISCLAIMER =
 export const DASHBOARD_DISCLAIMER =
   "Dit is een samenvatting op basis van wat je hebt geüpload en opgegeven — geen officiële belastingaangifte.";
 
-export const TIP_DISCLAIMER =
-  "Dit zijn algemene suggesties op basis van je ingevoerde gegevens, geen persoonlijk fiscaal advies. Raadpleeg bij twijfel een erkend boekhouder of fiscalist.";
+export const TIP_DISCLAIMER = "Algemene suggesties op basis van je cijfers, geen persoonlijk advies.";
 
 export const RISK_WARNING_PREFIX =
   "Deze uitgave sluit mogelijk niet goed aan bij je opgegeven bedrijfsactiviteiten.";
