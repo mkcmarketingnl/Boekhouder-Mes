@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getAnthropicClient, CLAUDE_MODEL } from "@/lib/anthropic/client";
+import { getAnthropicClient, CLAUDE_MODEL_FAST } from "@/lib/anthropic/client";
 import {
   buildExtractionSystemPrompt,
   buildExtractionUserPrompt,
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
           } as const);
 
     const response = await anthropic.messages.create({
-      model: CLAUDE_MODEL,
+      model: CLAUDE_MODEL_FAST,
       max_tokens: 1024,
       system: buildExtractionSystemPrompt(
         profile?.bedrijfsnaam ?? "",
