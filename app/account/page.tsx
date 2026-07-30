@@ -141,28 +141,48 @@ export default async function AccountPage({
         <Card className="fade-up p-6">
           <div className="mb-3 flex items-center gap-2">
             <Sparkles size={16} className="text-stamp" />
-            <h1 className="display text-xl font-semibold">Start je abonnement</h1>
+            <h1 className="display text-xl font-semibold">€25 per maand — en waarom</h1>
           </div>
+
           <p className="mb-4 text-sm leading-relaxed text-muted">
-            Boekhouder Mes kost <strong>€25 per maand</strong>. Geen verborgen kosten, elke maand opzegbaar.
+            We zijn geen boekhoudkantoor met dure overhead. Boekhouder Mes is meer een vriend die
+            toevallig verstand heeft van cijfers — en die vriend moet ook AI-rekeningen en
+            serverkosten betalen om dit voor je draaiende te houden. Daarom vragen we een eerlijke
+            prijs. Geen addertjes, geen jaarcontract, elke maand op te zeggen.
+          </p>
+
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+            Dit krijg je ervoor
           </p>
           <ul className="mb-5 space-y-2 text-[13px] text-ink">
             {[
-              "Onbeperkt bonnen en facturen scannen",
-              "Automatische BTW-berekening",
-              "AI-tips over je cijfers",
+              "Onbeperkt bonnen en facturen scannen — in één keer, ook meerdere tegelijk",
+              "Automatische BTW-berekening per maand, kwartaal of jaar",
+              "Live inzicht in wat je opzij moet zetten voor de inkomstenbelasting",
+              "Fiscale tips in simpele taal, geen jargon",
+              "Alles overzichtelijk op één plek, altijd actueel",
             ].map((item) => (
-              <li key={item} className="flex items-center gap-2">
-                <Check size={14} className="shrink-0 text-ok" />
+              <li key={item} className="flex items-start gap-2">
+                <Check size={14} className="mt-0.5 shrink-0 text-ok" />
                 {item}
               </li>
             ))}
           </ul>
+
+          <div className="mb-5 rounded-md border border-line bg-paper-dark p-3.5">
+            <p className="text-[13px] leading-relaxed text-ink">
+              Een gemiddelde boekhouder kost al snel <strong>€100 of meer per maand</strong>. Met
+              Boekhouder Mes hou je zelf de regie, bespaar je dat verschil, en betaal je een fractie
+              van wat een boekhouder normaal kost.
+            </p>
+          </div>
+
           <form action={startCheckout}>
             <Button type="submit" className="w-full justify-center">
-              Start abonnement — {formatCurrency(25)}/maand
+              Start — {formatCurrency(25)}/maand
             </Button>
           </form>
+          <p className="mt-3 text-center text-xs text-muted">Geen bedrijf. Gewoon Mes.</p>
         </Card>
       )}
     </div>
