@@ -89,7 +89,7 @@ export default async function DashboardPage({
       .select("*")
       .eq("user_id", user!.id)
       .order("gegenereerd_op", { ascending: false })
-      .limit(10),
+      .limit(5),
   ]);
 
   const snapshot = aggregateTransactions((periodTransactions ?? []) as Transaction[]);

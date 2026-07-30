@@ -71,7 +71,7 @@ export async function POST() {
     const { tips } = parseClaudeJson<{ tips: string[] }>(textBlock.text);
     const contextSnapshot = { jaar, ...snapshot, geschatteBelasting: belasting.bedrag };
 
-    const rows = tips.map((tip_tekst) => ({
+    const rows = tips.slice(0, 5).map((tip_tekst) => ({
       user_id: user.id,
       tip_tekst,
       context_snapshot: contextSnapshot,
