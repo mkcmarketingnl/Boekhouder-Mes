@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Sparkles, Lightbulb, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -9,8 +8,8 @@ import { TIP_DISCLAIMER } from "@/components/ui/Disclaimer";
 import { formatDate } from "@/lib/format";
 import type { AiTip } from "@/lib/types";
 
-export function FiscalTips({ tips }: { tips: AiTip[] }) {
-  const router = useRouter();
+export function FiscalTips() {
+  const [tips, setTips] = useState<AiTip[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,12 +18,12 @@ export function FiscalTips({ tips }: { tips: AiTip[] }) {
     setError(null);
     try {
       const res = await fetch("/api/tips/generate", { method: "POST" });
+      const json = await res.json().catch(() => null);
       if (!res.ok) {
-        const json = await res.json().catch(() => null);
         setError(json?.error ?? "Tips konden niet worden gegenereerd.");
         return;
       }
-      router.refresh();
+      setTips(json?.data ?? []);
     } finally {
       setLoading(false);
     }

@@ -33,8 +33,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="safe-top border-b border-line bg-paper/95 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 py-3 sm:px-6">
+      <header className="border-b border-line bg-paper/95 pt-[env(safe-area-inset-top)] backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 py-4 sm:px-6">
           <Link href="/dashboard" className="flex min-w-0 items-center gap-2">
             <Receipt size={18} className="shrink-0 text-stamp" />
             <span className="mono truncate text-[11px] uppercase tracking-wide text-muted sm:text-[12px]">

@@ -19,8 +19,8 @@ export const BELASTING_INDICATIE_DISCLAIMER =
 
 export function FooterDisclaimer() {
   return (
-    <footer className="safe-bottom border-t border-line bg-paper-dark px-6 py-4">
-      <p className="mx-auto max-w-5xl text-center text-xs text-muted">{APP_DISCLAIMER}</p>
+    <footer className="border-t border-line bg-paper-dark px-6 pt-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+      <p className="mx-auto max-w-5xl text-center text-xs leading-relaxed text-muted">{APP_DISCLAIMER}</p>
     </footer>
   );
 }

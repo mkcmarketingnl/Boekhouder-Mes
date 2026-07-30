@@ -52,13 +52,10 @@ select:focus {
   outline-offset: 2px;
 }
 
-/* Safe-area helpers (iPhone notch/homebar) */
-.safe-top {
-  padding-top: env(safe-area-inset-top);
-}
-.safe-bottom {
-  padding-bottom: env(safe-area-inset-bottom);
-}
+/* Safe-area (iPhone notch/homebar) top/bottom padding is applied inline per
+   element via Tailwind's pt-[calc(base+env(safe-area-inset-top))] etc., so it
+   always ADDS to that element's own padding instead of a shared class
+   clobbering it via cascade order. */
 .safe-x {
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);

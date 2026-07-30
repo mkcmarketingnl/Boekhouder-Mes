@@ -65,7 +65,7 @@ export function ManualEntryModal({
 
   return (
     <div className="fade-in fixed inset-0 z-50 flex items-end bg-ink/50 sm:items-center sm:justify-center sm:p-4">
-      <div className="pop-in safe-bottom safe-top flex h-full w-full flex-col overflow-y-auto bg-paper p-5 sm:h-auto sm:max-h-[88vh] sm:max-w-md sm:rounded-lg sm:border sm:border-line">
+      <div className="pop-in flex h-full w-full flex-col overflow-y-auto bg-paper px-5 pt-[calc(1.25rem+env(safe-area-inset-top))] pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:h-auto sm:max-h-[88vh] sm:max-w-md sm:rounded-lg sm:border sm:border-line">
         <div className="mb-1 flex items-start justify-between">
           <h2 className="display text-lg font-semibold">Handmatig toevoegen</h2>
           <button onClick={onClose} className="-m-2 min-h-11 min-w-11 p-2 text-muted" aria-label="Sluiten">

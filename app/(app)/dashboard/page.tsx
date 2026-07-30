@@ -21,7 +21,7 @@ import {
 } from "@/lib/finance";
 import { estimateIncomeTax } from "@/lib/tax";
 import { formatDateInput } from "@/lib/format";
-import type { AiTip, Profile, Transaction } from "@/lib/types";
+import type { Profile, Transaction } from "@/lib/types";
 import type { TransactionWithDoc } from "@/components/dashboard/TransactionDetailModal";
 
 const PAGE_SIZE = 5;
@@ -61,7 +61,6 @@ export default async function DashboardPage({
     { data: trendTransactions },
     { data: pagedTransactions, count },
     { data: yearTransactions },
-    { data: tipsRows },
   ] = await Promise.all([
     supabase
       .from("transactions")
@@ -84,12 +83,6 @@ export default async function DashboardPage({
       .eq("user_id", user!.id)
       .gte("factuurdatum", formatDateInput(yearStart))
       .lte("factuurdatum", formatDateInput(yearEnd)),
-    supabase
-      .from("ai_tips")
-      .select("*")
-      .eq("user_id", user!.id)
-      .order("gegenereerd_op", { ascending: false })
-      .limit(5),
   ]);
 
   const snapshot = aggregateTransactions((periodTransactions ?? []) as Transaction[]);
@@ -99,7 +92,6 @@ export default async function DashboardPage({
 
   const yearSnapshot = aggregateTransactions((yearTransactions ?? []) as Transaction[]);
   const taxEstimate = estimateIncomeTax(profile.rechtsvorm, yearSnapshot.winst);
-  const tips = (tipsRows ?? []) as AiTip[];
 
   function buildDashboardHref(overrides: { periode?: string; ref?: string; pagina?: number }) {
     const params = new URLSearchParams();
@@ -149,7 +141,7 @@ export default async function DashboardPage({
 
       <div className="grid gap-4 lg:grid-cols-2">
         <TaxEstimateCard estimate={taxEstimate} jaar={new Date().getFullYear()} />
-        <FiscalTips tips={tips} />
+        <FiscalTips />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">

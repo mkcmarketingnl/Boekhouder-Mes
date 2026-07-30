@@ -21,7 +21,7 @@ export function OnboardingForm({ existing }: { existing: Profile | null }) {
   });
 
   return (
-    <div className="safe-top safe-bottom mx-auto flex min-h-screen max-w-xl flex-col justify-center px-4 py-10">
+    <div className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-4 pt-[calc(2.5rem+env(safe-area-inset-top))] pb-[calc(2.5rem+env(safe-area-inset-bottom))]">
       <div className="fade-up mb-2 flex items-center gap-2.5">
         <Receipt size={20} className="text-stamp" />
         <span className="mono text-[13px] uppercase tracking-wide text-muted">Boekhouder Mes</span>
