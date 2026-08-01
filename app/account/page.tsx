@@ -108,7 +108,7 @@ export default async function AccountPage({
       {!billing?.is_comped && hasAccess && (
         <Card className="fade-up p-6">
           <h1 className="display mb-1 text-xl font-semibold">Mijn account</h1>
-          <p className="mb-4 text-sm text-muted">€25 per maand</p>
+          <p className="mb-4 text-sm text-muted">€25 per maand (excl. btw)</p>
           <div className="mb-5 space-y-2 rounded-md border border-line bg-paper-dark p-3.5 text-[13px]">
             <div className="flex justify-between">
               <span className="text-muted">Status</span>
@@ -143,6 +143,7 @@ export default async function AccountPage({
             <Sparkles size={16} className="text-stamp" />
             <h1 className="display text-xl font-semibold">€25 per maand — en waarom</h1>
           </div>
+          <p className="mb-4 -mt-2 text-xs text-muted">Prijs excl. btw.</p>
 
           <p className="mb-4 text-sm leading-relaxed text-muted">
             We zijn geen boekhoudkantoor met dure overhead. Boekhouder Mes is meer een vriend die
@@ -179,7 +180,7 @@ export default async function AccountPage({
 
           <form action={startCheckout}>
             <Button type="submit" className="w-full justify-center">
-              Start — {formatCurrency(25)}/maand
+              Start — {formatCurrency(25)}/maand excl. btw
             </Button>
           </form>
           <p className="mt-3 text-center text-xs text-muted">Geen bedrijf. Gewoon Mes.</p>

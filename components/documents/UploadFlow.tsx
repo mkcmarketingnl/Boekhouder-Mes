@@ -26,6 +26,7 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastData | null>(null);
   const [reviewQueue, setReviewQueue] = useState<PendingReview[]>([]);
+  const [reviewQueueTotal, setReviewQueueTotal] = useState(0);
   const [manualOpen, setManualOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -118,17 +119,23 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
       if (errors.length > 0) setError(errors.join(" "));
       if (newlyNeedsReview.length > 0) {
         setReviewQueue((prev) => [...prev, ...newlyNeedsReview]);
+        setReviewQueueTotal((prev) => (reviewQueue.length === 0 ? newlyNeedsReview.length : prev + newlyNeedsReview.length));
       }
       setProcessingCount(0);
       router.refresh();
     },
-    [processOneFile, router]
+    [processOneFile, router, reviewQueue.length]
   );
 
   const currentReview = reviewQueue[0] ?? null;
+  const queuePosition = reviewQueueTotal - reviewQueue.length + 1;
 
   function advanceQueue() {
-    setReviewQueue((prev) => prev.slice(1));
+    setReviewQueue((prev) => {
+      const next = prev.slice(1);
+      if (next.length === 0) setReviewQueueTotal(0);
+      return next;
+    });
   }
 
   return (
@@ -186,12 +193,13 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
 
       {currentReview && (
         <ReviewModal
+          key={currentReview.documentId}
           documentId={currentReview.documentId}
           extracted={currentReview.extracted}
           userId={userId}
           defaultBtwPercentage={defaultBtwPercentage}
-          queuePosition={reviewQueue.length > 1 ? 1 : undefined}
-          queueTotal={reviewQueue.length > 1 ? reviewQueue.length : undefined}
+          queuePosition={reviewQueueTotal > 1 ? queuePosition : undefined}
+          queueTotal={reviewQueueTotal > 1 ? reviewQueueTotal : undefined}
           onClose={advanceQueue}
           onSaved={(message) => {
             advanceQueue();

@@ -22,7 +22,13 @@ export async function startCheckout() {
   const stripe = getStripeClient();
   const baseParams: Stripe.Checkout.SessionCreateParams = {
     mode: "subscription",
-    line_items: [{ price: process.env.STRIPE_PRICE_ID!, quantity: 1 }],
+    line_items: [
+      {
+        price: process.env.STRIPE_PRICE_ID!,
+        quantity: 1,
+        tax_rates: process.env.STRIPE_TAX_RATE_ID ? [process.env.STRIPE_TAX_RATE_ID] : undefined,
+      },
+    ],
     client_reference_id: user.id,
     success_url: `${siteUrl()}/account?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${siteUrl()}/account`,
