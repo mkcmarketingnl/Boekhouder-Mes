@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { X, Check } from "lucide-react";
+import { X, Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { AmountFields } from "@/components/documents/AmountFields";
 import { CATEGORIE_OPTIES } from "@/lib/types";
-import { saveTransaction } from "@/lib/transactions";
-import type { TransactieType } from "@/lib/types";
+import { saveTransaction, checkDuplicateFactuur } from "@/lib/transactions";
+import { formatCurrency, formatDate } from "@/lib/format";
+import type { TransactieType, Transaction } from "@/lib/types";
 
 export function ManualEntryModal({
   userId,
@@ -31,12 +32,24 @@ export function ManualEntryModal({
   const [categorie, setCategorie] = useState<string>(CATEGORIE_OPTIES[0]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [duplicaatVan, setDuplicaatVan] = useState<Transaction | null>(null);
+  const [duplicaatBevestigd, setDuplicaatBevestigd] = useState(false);
 
   async function handleSave() {
     if (!bedragInclBtw || Number(bedragInclBtw) <= 0) {
       setError("Vul een geldig totaalbedrag in.");
       return;
     }
+
+    if (!duplicaatBevestigd) {
+      const bestaande = await checkDuplicateFactuur(userId, leverancier, factuurnummer);
+      if (bestaande) {
+        setDuplicaatVan(bestaande);
+        setDuplicaatBevestigd(true);
+        return;
+      }
+    }
+
     setSaving(true);
     setError(null);
 
@@ -99,7 +112,14 @@ export function ManualEntryModal({
         />
 
         <Field label={`${type === "omzet" ? "Klant" : "Leverancier"} (optioneel)`}>
-          <Input value={leverancier} onChange={(e) => setLeverancier(e.target.value)} />
+          <Input
+            value={leverancier}
+            onChange={(e) => {
+              setLeverancier(e.target.value);
+              setDuplicaatBevestigd(false);
+              setDuplicaatVan(null);
+            }}
+          />
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
@@ -107,7 +127,14 @@ export function ManualEntryModal({
             <Input type="date" value={factuurdatum} onChange={(e) => setFactuurdatum(e.target.value)} />
           </Field>
           <Field label="Factuurnummer (optioneel)">
-            <Input value={factuurnummer} onChange={(e) => setFactuurnummer(e.target.value)} />
+            <Input
+              value={factuurnummer}
+              onChange={(e) => {
+                setFactuurnummer(e.target.value);
+                setDuplicaatBevestigd(false);
+                setDuplicaatVan(null);
+              }}
+            />
           </Field>
         </div>
 
@@ -132,11 +159,22 @@ export function ManualEntryModal({
           />
         </Field>
 
+        {duplicaatVan && (
+          <div className="slide-down mb-4 flex gap-2.5 rounded-md border border-warn/30 bg-warn-bg p-3">
+            <Copy size={16} className="mt-0.5 shrink-0 text-warn" />
+            <div className="text-[12.5px] leading-relaxed text-ink">
+              <strong>Deze factuur lijkt al geüpload.</strong> {duplicaatVan.leverancier}, factuurnummer{" "}
+              {duplicaatVan.factuurnummer}, opgeslagen op {formatDate(duplicaatVan.factuurdatum)} voor{" "}
+              {formatCurrency(duplicaatVan.bedrag_incl_btw)}. Weet je zeker dat dit een nieuwe factuur is?
+            </div>
+          </div>
+        )}
+
         {error && <p className="mb-3 text-sm text-stamp">{error}</p>}
 
         <Button type="button" onClick={handleSave} loading={saving} className="mt-1 w-full justify-center">
           <Check size={15} />
-          Opslaan
+          {duplicaatVan ? "Toch opslaan (nieuwe factuur)" : "Opslaan"}
         </Button>
       </div>
     </div>

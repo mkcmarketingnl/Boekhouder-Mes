@@ -6,7 +6,8 @@ import {
   buildExtractionUserPrompt,
   parseClaudeJson,
 } from "@/lib/anthropic/prompts";
-import type { ExtractedInvoiceData } from "@/lib/types";
+import { normalizeSupplierName } from "@/lib/types";
+import type { Categorie, ExtractedInvoiceData, TransactieType } from "@/lib/types";
 
 const EXT_TO_MEDIA_TYPE: Record<string, string> = {
   jpg: "image/jpeg",
@@ -117,10 +118,33 @@ export async function POST(request: NextRequest) {
       omschrijving: null,
       voorgestelde_categorie: null,
       type: null,
+      type_onzeker: true,
       leesbaarheid: "slecht",
       risico: "midden",
       risico_toelichting: "Automatische verwerking is mislukt. Vul de gegevens handmatig in.",
     };
+  }
+
+  // Leveranciers-geheugen: bij een herkende, terugkerende leverancier (kosten) nemen we de
+  // categorie/type over van eerdere bevestigde facturen i.p.v. steeds opnieuw te gokken.
+  if (extracted.leverancier) {
+    const naamGenormaliseerd = normalizeSupplierName(extracted.leverancier);
+    const { data: supplier } = await supabase
+      .from("suppliers")
+      .select("laatst_categorie, laatst_type, keer_gezien")
+      .eq("user_id", user.id)
+      .eq("naam_genormaliseerd", naamGenormaliseerd)
+      .maybeSingle();
+
+    if (supplier && supplier.keer_gezien >= 1) {
+      if (supplier.laatst_categorie) {
+        extracted.voorgestelde_categorie = supplier.laatst_categorie as Categorie;
+      }
+      if (supplier.laatst_type) {
+        extracted.type = supplier.laatst_type as TransactieType;
+        extracted.type_onzeker = false;
+      }
+    }
   }
 
   const status = extracted.leesbaarheid === "goed" ? "verwerkt" : "geflaggd";

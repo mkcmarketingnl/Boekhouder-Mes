@@ -9,8 +9,8 @@ import { Toast, type ToastData } from "@/components/ui/Toast";
 import { ReviewModal } from "@/components/documents/ReviewModal";
 import { ManualEntryModal } from "@/components/documents/ManualEntryModal";
 import { prepareUploadFile } from "@/lib/imageCompress";
-import { saveTransaction } from "@/lib/transactions";
-import type { ExtractedInvoiceData } from "@/lib/types";
+import { saveTransaction, checkDuplicateFactuur } from "@/lib/transactions";
+import type { ExtractedInvoiceData, Transaction } from "@/lib/types";
 
 const ACCEPTED = "image/*,application/pdf,.heic,.heif";
 const MAX_SIZE_MB = 15;
@@ -18,6 +18,7 @@ const MAX_SIZE_MB = 15;
 interface PendingReview {
   documentId: string;
   extracted: ExtractedInvoiceData | null;
+  duplicaatVan?: Transaction | null;
 }
 
 export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; defaultBtwPercentage: number }) {
@@ -67,7 +68,16 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
       const json = await res.json();
       const extracted: ExtractedInvoiceData | null = json?.data ?? null;
 
-      const autoSaveOk = extracted && extracted.leesbaarheid === "goed" && extracted.risico === "laag";
+      const duplicaatVan = extracted
+        ? await checkDuplicateFactuur(userId, extracted.leverancier ?? "", extracted.factuurnummer)
+        : null;
+
+      const autoSaveOk =
+        extracted &&
+        extracted.leesbaarheid === "goed" &&
+        extracted.risico === "laag" &&
+        !extracted.type_onzeker &&
+        !duplicaatVan;
 
       if (autoSaveOk && extracted) {
         const { error: saveError } = await saveTransaction(userId, {
@@ -85,7 +95,7 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
           invoerwijze: "ai",
         });
         if (saveError) {
-          return { documentId: doc.id, extracted };
+          return { documentId: doc.id, extracted, duplicaatVan };
         }
         showToast(
           `${extracted.leverancier ?? "Bon"} automatisch herkend en toegevoegd — €${(extracted.bedrag_incl_btw ?? 0).toFixed(2)}`
@@ -93,7 +103,7 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
         return null;
       }
 
-      return { documentId: doc.id, extracted };
+      return { documentId: doc.id, extracted, duplicaatVan };
     },
     [userId, defaultBtwPercentage, showToast]
   );
@@ -196,6 +206,7 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
           key={currentReview.documentId}
           documentId={currentReview.documentId}
           extracted={currentReview.extracted}
+          duplicaatVan={currentReview.duplicaatVan ?? null}
           userId={userId}
           defaultBtwPercentage={defaultBtwPercentage}
           queuePosition={reviewQueueTotal > 1 ? queuePosition : undefined}

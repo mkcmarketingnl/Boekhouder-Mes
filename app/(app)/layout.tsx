@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAccessStatus } from "@/lib/subscription";
 import { SignOutButton } from "@/components/SignOutButton";
 import { FooterDisclaimer } from "@/components/ui/Disclaimer";
+import { ChatWidget } from "@/components/chat/ChatWidget";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -42,6 +43,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </span>
           </Link>
           <div className="flex shrink-0 items-center gap-3 sm:gap-4">
+            <Link href="/relaties" className="min-h-11 content-center text-xs text-muted underline">
+              Relaties
+            </Link>
             <Link href="/account" className="min-h-11 content-center text-xs text-muted underline">
               Account
             </Link>
@@ -51,6 +55,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </header>
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6 sm:py-8">{children}</main>
       <FooterDisclaimer />
+      <ChatWidget />
     </div>
   );
 }

@@ -119,6 +119,36 @@ export function groupMonthlyTrend(transactions: Transaction[], monthsCount = 6):
   });
 }
 
+export interface RelatieSamenvatting {
+  naam: string;
+  totaal: number;
+  aantal: number;
+  laatsteDatum: string;
+}
+
+export function groupByLeverancier(transactions: Transaction[], type: "kosten" | "omzet"): RelatieSamenvatting[] {
+  const map = new Map<string, RelatieSamenvatting>();
+
+  for (const t of transactions) {
+    if (t.type !== type) continue;
+    const bestaand = map.get(t.leverancier);
+    if (bestaand) {
+      bestaand.totaal += t.bedrag_incl_btw;
+      bestaand.aantal += 1;
+      if (t.factuurdatum > bestaand.laatsteDatum) bestaand.laatsteDatum = t.factuurdatum;
+    } else {
+      map.set(t.leverancier, {
+        naam: t.leverancier,
+        totaal: t.bedrag_incl_btw,
+        aantal: 1,
+        laatsteDatum: t.factuurdatum,
+      });
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) => b.totaal - a.totaal);
+}
+
 export function btwUitlegzin(btwSaldo: number, periodeLabel: string): string {
   const bedrag = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(
     Math.abs(btwSaldo)

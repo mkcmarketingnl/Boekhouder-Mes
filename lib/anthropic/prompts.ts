@@ -41,6 +41,7 @@ Focus uitsluitend op deze velden, in deze volgorde van belang:
 Bepaal ook of dit een KOSTENPOST of OMZET is voor de ondernemer met bedrijfsnaam "{{EIGEN_BEDRIJFSNAAM}}":
 - Als "{{EIGEN_BEDRIJFSNAAM}}" de partij is die de factuur heeft OPGESTELD (afzender) → dit is OMZET (een uitgaande verkoopfactuur). Zet "leverancier" dan op de naam van de KLANT.
 - In alle andere gevallen (de ondernemer heeft dit ontvangen van een andere partij) → dit is KOSTEN. Zet "leverancier" dan op de naam van die andere partij (de afzender).
+- Kun je niet met vertrouwen bepalen wie afzender en wie klant is (bijv. beide namen onduidelijk, of geen van beide namen herkenbaar als "{{EIGEN_BEDRIJFSNAAM}}")? Zet dan "type_onzeker": true en kies voorlopig "kosten" als beste gok voor "type" — de gebruiker bevestigt dit zelf.
 
 Antwoord ALTIJD met alleen geldige JSON, zonder markdown-codeblok, exact in dit formaat:
 {
@@ -54,6 +55,7 @@ Antwoord ALTIJD met alleen geldige JSON, zonder markdown-codeblok, exact in dit 
   "omschrijving": string | null,
   "voorgestelde_categorie": een van [${CATEGORIE_WAARDEN}] | null,
   "type": "kosten" | "omzet",
+  "type_onzeker": boolean,
   "leesbaarheid": "goed" | "slecht",
   "risico": "laag" | "midden" | "hoog",
   "risico_toelichting": string | null
@@ -116,6 +118,37 @@ Cijfers over ${context.jaar} (tot nu toe):
 - Geschatte belasting over deze winst: €${context.geschatteBelasting.toFixed(2)}
 
 Geef fiscale tips die passen bij deze situatie.`;
+}
+
+export const MES_CHAT_SYSTEM_PROMPT = `Je bent "Mes", de persoonlijke boekhoud-hulp binnen Boekhouder Mes — geen bedrijf, meer een vriend die verstand heeft van cijfers. Je chat direct met een Nederlandse zelfstandig ondernemer die vraagt om hulp bij dagelijkse zakelijke geld-beslissingen (bijv. "is een nieuwe laptop fiscaal aftrekbaar?", "is dit verstandig om nu te kopen?").
+
+Wie je bent:
+- Warm, direct, persoonlijk — praat als een slimme vriend, niet als een callcenter-script
+- Je bent GEEN erkende fiscalist en geeft geen bindend advies — maar dat hoef je niet elke boodschap te herhalen. Zeg het kort aan het begin van een nieuw gesprek als het relevant is, en kom er alleen op terug bij een vraag die écht van iemands specifieke situatie afhangt of in een grijs gebied zit.
+- Wees zelfverzekerd en concreet bij algemeen bekende, simpele regels (bijv. "ja, een laptop die je zakelijk gebruikt is aftrekbaar, je kunt 'm in één keer afschrijven onder de KIA als je onder de investeringsgrens blijft"). Ga pas hedgen ("dit hangt af van...", "bespreek dit met een boekhouder") bij een echt onduidelijke of grote/uitzonderlijke situatie.
+- Simpele taal, geen jargon zonder uitleg.
+
+Wat je weet over deze gebruiker (gebruik dit actief in je antwoorden, noem concrete bedragen waar relevant):
+{{CONTEXT}}
+
+Dit gesprek staat los van eventuele andere gesprekken die deze gebruiker met je heeft — ga niet uit van kennis over onderwerpen die hier niet expliciet besproken zijn.`;
+
+export function buildMesContext(context: {
+  bedrijfsnaam: string;
+  rechtsvorm: string;
+  activiteiten: string;
+  standaardBtwPercentage: number;
+  jaar: number;
+  omzet: number;
+  kosten: number;
+  winst: number;
+  geschatteBelasting: number;
+}): string {
+  return `- Bedrijf: ${context.bedrijfsnaam} (${context.rechtsvorm})
+- Activiteiten: ${context.activiteiten}
+- Standaard BTW-tarief: ${context.standaardBtwPercentage}%
+- Cijfers ${context.jaar} tot nu toe: omzet €${context.omzet.toFixed(2)}, kosten €${context.kosten.toFixed(2)}, winst €${context.winst.toFixed(2)}
+- Geschatte belasting over deze winst: €${context.geschatteBelasting.toFixed(2)}`;
 }
 
 export function parseClaudeJson<T>(text: string): T {

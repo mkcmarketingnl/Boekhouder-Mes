@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, Check, AlertTriangle } from "lucide-react";
+import { X, Check, AlertTriangle, Copy } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input, Select, Textarea } from "@/components/ui/Input";
@@ -9,11 +9,13 @@ import { AmountFields } from "@/components/documents/AmountFields";
 import { RISK_WARNING_PREFIX, RISK_WARNING_SUFFIX } from "@/components/ui/Disclaimer";
 import { CATEGORIE_OPTIES } from "@/lib/types";
 import { saveTransaction } from "@/lib/transactions";
-import type { ExtractedInvoiceData, RisicoNiveau, TransactieType } from "@/lib/types";
+import { formatCurrency, formatDate } from "@/lib/format";
+import type { ExtractedInvoiceData, RisicoNiveau, TransactieType, Transaction } from "@/lib/types";
 
 interface Props {
   documentId: string;
   extracted: ExtractedInvoiceData | null;
+  duplicaatVan?: Transaction | null;
   userId: string;
   defaultBtwPercentage: number;
   queuePosition?: number;
@@ -25,6 +27,7 @@ interface Props {
 export function ReviewModal({
   documentId,
   extracted,
+  duplicaatVan,
   userId,
   defaultBtwPercentage,
   queuePosition,
@@ -101,6 +104,27 @@ export function ReviewModal({
             : "De scan is niet gelukt. Vul de gegevens hieronder handmatig in."}
         </p>
 
+        {duplicaatVan && (
+          <div className="slide-down mb-4 flex gap-2.5 rounded-md border border-warn/30 bg-warn-bg p-3">
+            <Copy size={16} className="mt-0.5 shrink-0 text-warn" />
+            <div className="text-[12.5px] leading-relaxed text-ink">
+              <strong>Deze factuur lijkt al geüpload.</strong> {duplicaatVan.leverancier}, factuurnummer{" "}
+              {duplicaatVan.factuurnummer}, opgeslagen op {formatDate(duplicaatVan.factuurdatum)} voor{" "}
+              {formatCurrency(duplicaatVan.bedrag_incl_btw)}. Weet je zeker dat dit een nieuwe factuur is?
+            </div>
+          </div>
+        )}
+
+        {extracted?.type_onzeker && (
+          <div className="slide-down mb-4 flex gap-2.5 rounded-md border border-warn/30 bg-warn-bg p-3">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warn" />
+            <div className="text-[12.5px] leading-relaxed text-ink">
+              We konden niet met zekerheid bepalen of dit een kostenpost of omzet is. Kies hieronder
+              zelf het juiste type.
+            </div>
+          </div>
+        )}
+
         {risicovol && (
           <div className="slide-down mb-4 flex gap-2.5 rounded-md border border-stamp/20 bg-stamp-bg p-3">
             <AlertTriangle size={16} className="mt-0.5 shrink-0 text-stamp" />
@@ -170,7 +194,11 @@ export function ReviewModal({
 
         <Button type="button" onClick={handleSave} loading={saving} className="mt-1 w-full justify-center">
           <Check size={15} />
-          {risicovol ? "Toch opslaan (op eigen risico)" : "Opslaan"}
+          {duplicaatVan
+            ? "Toch opslaan (nieuwe factuur)"
+            : risicovol
+              ? "Toch opslaan (op eigen risico)"
+              : "Opslaan"}
         </Button>
       </div>
     </div>

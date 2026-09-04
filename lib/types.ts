@@ -57,6 +57,7 @@ export interface ExtractedInvoiceData {
   omschrijving: string | null;
   voorgestelde_categorie: Categorie | null;
   type: TransactieType | null;
+  type_onzeker: boolean;
   leesbaarheid: Leesbaarheid;
   risico: RisicoNiveau;
   risico_toelichting: string | null;
@@ -100,4 +101,38 @@ export interface AiTip {
   gegenereerd_op: string;
   tip_tekst: string;
   context_snapshot: Record<string, unknown> | null;
+}
+
+export interface Supplier {
+  id: string;
+  user_id: string;
+  naam: string;
+  naam_genormaliseerd: string;
+  laatst_categorie: string | null;
+  laatst_type: TransactieType | null;
+  keer_gezien: number;
+  laatst_gebruikt: string;
+  created_at: string;
+}
+
+export type ChatRole = "user" | "assistant";
+
+export interface ChatConversation {
+  id: string;
+  user_id: string;
+  titel: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversation_id: string;
+  role: ChatRole;
+  content: string;
+  created_at: string;
+}
+
+export function normalizeSupplierName(naam: string): string {
+  return naam.trim().toLowerCase().replace(/\s+/g, " ");
 }
