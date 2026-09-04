@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getAnthropicClient, CLAUDE_MODEL_FAST } from "@/lib/anthropic/client";
+import { getAccessStatus } from "@/lib/subscription";
 import {
   buildExtractionSystemPrompt,
   buildExtractionUserPrompt,
   parseClaudeJson,
 } from "@/lib/anthropic/prompts";
 import { normalizeSupplierName } from "@/lib/types";
-import type { Categorie, ExtractedInvoiceData, TransactieType } from "@/lib/types";
+import type { Categorie, ExtractedInvoiceData } from "@/lib/types";
 
 const EXT_TO_MEDIA_TYPE: Record<string, string> = {
   jpg: "image/jpeg",
@@ -25,6 +26,11 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "Niet ingelogd." }, { status: 401 });
+  }
+
+  const { hasAccess } = await getAccessStatus(user.id);
+  if (!hasAccess) {
+    return NextResponse.json({ error: "Geen actief abonnement." }, { status: 403 });
   }
 
   const { documentId } = await request.json();
@@ -125,25 +131,24 @@ export async function POST(request: NextRequest) {
     };
   }
 
-  // Leveranciers-geheugen: bij een herkende, terugkerende leverancier (kosten) nemen we de
-  // categorie/type over van eerdere bevestigde facturen i.p.v. steeds opnieuw te gokken.
-  if (extracted.leverancier) {
+  // Leveranciers-geheugen: de suppliers-tabel bevat uitsluitend geschiedenis van bevestigde
+  // KOSTEN-facturen (zie rememberSupplier in lib/transactions.ts). Die geschiedenis mag daarom
+  // nooit het "type" van een nieuwe factuur overschrijven — dezelfde partij kan net zo goed een
+  // keer een omzetfactuur zijn (je verkoopt ook aan een leverancier, of andersom). We passen de
+  // herinnering alleen toe op de categorie-suggestie, en alleen als de AI dit exemplaar zelf ook
+  // al zeker als kosten heeft herkend. Bij onzekerheid ("type_onzeker") blijft de regel "bij
+  // twijfel altijd vragen" leidend — dat wordt hier nooit stilzwijgend opgelost.
+  if (extracted.leverancier && !extracted.type_onzeker && extracted.type === "kosten") {
     const naamGenormaliseerd = normalizeSupplierName(extracted.leverancier);
     const { data: supplier } = await supabase
       .from("suppliers")
-      .select("laatst_categorie, laatst_type, keer_gezien")
+      .select("laatst_categorie, keer_gezien")
       .eq("user_id", user.id)
       .eq("naam_genormaliseerd", naamGenormaliseerd)
       .maybeSingle();
 
-    if (supplier && supplier.keer_gezien >= 1) {
-      if (supplier.laatst_categorie) {
-        extracted.voorgestelde_categorie = supplier.laatst_categorie as Categorie;
-      }
-      if (supplier.laatst_type) {
-        extracted.type = supplier.laatst_type as TransactieType;
-        extracted.type_onzeker = false;
-      }
+    if (supplier && supplier.keer_gezien >= 1 && supplier.laatst_categorie) {
+      extracted.voorgestelde_categorie = supplier.laatst_categorie as Categorie;
     }
   }
 

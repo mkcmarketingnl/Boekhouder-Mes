@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getAnthropicClient, CLAUDE_MODEL } from "@/lib/anthropic/client";
+import { getAccessStatus } from "@/lib/subscription";
 import { MES_CHAT_SYSTEM_PROMPT, buildMesContext } from "@/lib/anthropic/prompts";
 import { aggregateTransactions, getPeriodBounds } from "@/lib/finance";
 import { estimateIncomeTax } from "@/lib/tax";
@@ -17,6 +18,11 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "Niet ingelogd." }, { status: 401 });
+  }
+
+  const { hasAccess } = await getAccessStatus(user.id);
+  if (!hasAccess) {
+    return NextResponse.json({ error: "Geen actief abonnement." }, { status: 403 });
   }
 
   const { conversationId: incomingConversationId, message } = await request.json();

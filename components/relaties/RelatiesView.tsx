@@ -51,10 +51,10 @@ export function RelatiesView({
       ) : (
         <div className="flex flex-col gap-2.5">
           {rows.map((r) => (
-            <div key={r.naam}>
+            <div key={r.sleutel}>
               <button
                 type="button"
-                onClick={() => setGeselecteerd(geselecteerd === r.naam ? null : r.naam)}
+                onClick={() => setGeselecteerd(geselecteerd === r.sleutel ? null : r.sleutel)}
                 className="card-hover w-full text-left"
               >
                 <Card className="flex items-center justify-between gap-3 p-3.5">
@@ -68,15 +68,15 @@ export function RelatiesView({
                     <span className="mono text-sm font-semibold text-ink">{formatCurrency(r.totaal)}</span>
                     <ChevronRight
                       size={16}
-                      className={cn("text-muted transition-transform", geselecteerd === r.naam && "rotate-90")}
+                      className={cn("text-muted transition-transform", geselecteerd === r.sleutel && "rotate-90")}
                     />
                   </div>
                 </Card>
               </button>
 
-              {geselecteerd === r.naam && (
+              {geselecteerd === r.sleutel && (
                 <div className="slide-down mt-2.5 pl-2">
-                  <DocumentsList rows={transactiesPerRelatie[r.naam] ?? []} />
+                  <DocumentsList rows={transactiesPerRelatie[r.sleutel] ?? []} />
                 </div>
               )}
             </div>

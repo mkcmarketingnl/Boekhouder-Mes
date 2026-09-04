@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { RelatiesView } from "@/components/relaties/RelatiesView";
 import { groupByLeverancier } from "@/lib/finance";
+import { normalizeSupplierName } from "@/lib/types";
 import type { Transaction } from "@/lib/types";
 import type { TransactionWithDoc } from "@/components/dashboard/TransactionDetailModal";
 
@@ -23,8 +24,9 @@ export default async function RelatiesPage() {
 
   const transactiesPerRelatie: Record<string, TransactionWithDoc[]> = {};
   for (const t of transacties) {
-    if (!transactiesPerRelatie[t.leverancier]) transactiesPerRelatie[t.leverancier] = [];
-    transactiesPerRelatie[t.leverancier].push(t);
+    const sleutel = normalizeSupplierName(t.leverancier) || t.leverancier;
+    if (!transactiesPerRelatie[sleutel]) transactiesPerRelatie[sleutel] = [];
+    transactiesPerRelatie[sleutel].push(t);
   }
 
   return (

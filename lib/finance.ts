@@ -15,6 +15,7 @@ import {
   format,
 } from "date-fns";
 import { nl } from "date-fns/locale";
+import { normalizeSupplierName } from "@/lib/types";
 import type { Aangiftetijdvak, Transaction } from "@/lib/types";
 
 export type PeriodType = "maand" | "kwartaal" | "jaar";
@@ -120,6 +121,7 @@ export function groupMonthlyTrend(transactions: Transaction[], monthsCount = 6):
 }
 
 export interface RelatieSamenvatting {
+  sleutel: string;
   naam: string;
   totaal: number;
   aantal: number;
@@ -127,17 +129,25 @@ export interface RelatieSamenvatting {
 }
 
 export function groupByLeverancier(transactions: Transaction[], type: "kosten" | "omzet"): RelatieSamenvatting[] {
+  // Groeperen op genormaliseerde naam (zelfde helper als het leveranciers-geheugen), anders
+  // splitst dezelfde partij op in losse rijen door kleine schrijfverschillen (hoofdletters,
+  // spaties) tussen facturen — en klopt de "exacte" totaalteller niet meer.
   const map = new Map<string, RelatieSamenvatting>();
 
   for (const t of transactions) {
     if (t.type !== type) continue;
-    const bestaand = map.get(t.leverancier);
+    const key = normalizeSupplierName(t.leverancier) || t.leverancier;
+    const bestaand = map.get(key);
     if (bestaand) {
       bestaand.totaal += t.bedrag_incl_btw;
       bestaand.aantal += 1;
-      if (t.factuurdatum > bestaand.laatsteDatum) bestaand.laatsteDatum = t.factuurdatum;
+      if (t.factuurdatum > bestaand.laatsteDatum) {
+        bestaand.laatsteDatum = t.factuurdatum;
+        bestaand.naam = t.leverancier;
+      }
     } else {
-      map.set(t.leverancier, {
+      map.set(key, {
+        sleutel: key,
         naam: t.leverancier,
         totaal: t.bedrag_incl_btw,
         aantal: 1,

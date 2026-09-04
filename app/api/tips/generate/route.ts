@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getAnthropicClient, CLAUDE_MODEL } from "@/lib/anthropic/client";
+import { getAccessStatus } from "@/lib/subscription";
 import { TIPS_SYSTEM_PROMPT, buildTipsUserPrompt, parseClaudeJson } from "@/lib/anthropic/prompts";
 import { aggregateTransactions, getPeriodBounds } from "@/lib/finance";
 import { estimateIncomeTax } from "@/lib/tax";
@@ -15,6 +16,11 @@ export async function POST() {
 
   if (!user) {
     return NextResponse.json({ error: "Niet ingelogd." }, { status: 401 });
+  }
+
+  const { hasAccess } = await getAccessStatus(user.id);
+  if (!hasAccess) {
+    return NextResponse.json({ error: "Geen actief abonnement." }, { status: 403 });
   }
 
   const { data: profileRow } = await supabase
@@ -76,6 +82,11 @@ export async function POST() {
       tip_tekst,
       context_snapshot: contextSnapshot,
     }));
+
+    // Tips worden elk bezoek vers gegenereerd (geen stale tips bij terugkomst) — de oude set
+    // vervangen we dus bij elke generatie i.p.v. te blijven stapelen, anders groeit de tabel
+    // ongelimiteerd terwijl de oude rijen toch nooit meer getoond worden.
+    await supabase.from("ai_tips").delete().eq("user_id", user.id);
 
     const { data: inserted, error: insertError } = await supabase.from("ai_tips").insert(rows).select();
     if (insertError) throw insertError;
