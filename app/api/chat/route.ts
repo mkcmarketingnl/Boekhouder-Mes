@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getAnthropicClient, CLAUDE_MODEL } from "@/lib/anthropic/client";
 import { getAccessStatus } from "@/lib/subscription";
@@ -9,6 +9,18 @@ import { formatDateInput } from "@/lib/format";
 import type { ChatMessage, Profile, Transaction } from "@/lib/types";
 
 const MAX_TITLE_LENGTH = 48;
+const encoder = new TextEncoder();
+
+function sseEvent(event: string, data: unknown) {
+  return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+function errorResponse(error: string, status: number) {
+  return new Response(sseEvent("error", { error }), {
+    status,
+    headers: { "Content-Type": "text/event-stream" },
+  });
+}
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -17,19 +29,19 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: "Niet ingelogd." }, { status: 401 });
+    return errorResponse("Niet ingelogd.", 401);
   }
 
   const { hasAccess } = await getAccessStatus(user.id);
   if (!hasAccess) {
-    return NextResponse.json({ error: "Geen actief abonnement." }, { status: 403 });
+    return errorResponse("Geen actief abonnement.", 403);
   }
 
   const { conversationId: incomingConversationId, message } = await request.json();
   const trimmedMessage = String(message ?? "").trim();
 
   if (!trimmedMessage) {
-    return NextResponse.json({ error: "Bericht is leeg." }, { status: 400 });
+    return errorResponse("Bericht is leeg.", 400);
   }
 
   let conversationId = incomingConversationId as string | undefined;
@@ -44,7 +56,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (convError || !conversation) {
-      return NextResponse.json({ error: "Gesprek kon niet worden aangemaakt." }, { status: 500 });
+      return errorResponse("Gesprek kon niet worden aangemaakt.", 500);
     }
     conversationId = conversation.id;
   } else {
@@ -55,7 +67,7 @@ export async function POST(request: NextRequest) {
       .eq("user_id", user.id)
       .maybeSingle();
     if (!conversation) {
-      return NextResponse.json({ error: "Gesprek niet gevonden." }, { status: 404 });
+      return errorResponse("Gesprek niet gevonden.", 404);
     }
   }
 
@@ -64,7 +76,7 @@ export async function POST(request: NextRequest) {
     .insert({ conversation_id: conversationId, role: "user", content: trimmedMessage });
 
   if (insertUserMsgError) {
-    return NextResponse.json({ error: "Bericht kon niet worden opgeslagen." }, { status: 500 });
+    return errorResponse("Bericht kon niet worden opgeslagen.", 500);
   }
 
   const { data: historyRows } = await supabase
@@ -75,8 +87,12 @@ export async function POST(request: NextRequest) {
 
   const history = (historyRows ?? []) as ChatMessage[];
 
-  const { data: profileRow } = await supabase.from("profiles").select("*").eq("user_id", user.id).single();
-  const profile = profileRow as Profile;
+  const { data: profileRow } = await supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle();
+  const profile = profileRow as Profile | null;
+
+  if (!profile) {
+    return errorResponse("Bedrijfsprofiel ontbreekt.", 400);
+  }
 
   const { start, end } = getPeriodBounds("jaar");
   const { data: yearTransactions } = await supabase
@@ -101,30 +117,61 @@ export async function POST(request: NextRequest) {
     geschatteBelasting: belasting.bedrag,
   });
 
-  try {
-    const anthropic = getAnthropicClient();
-    const response = await anthropic.messages.create({
-      model: CLAUDE_MODEL,
-      max_tokens: 1024,
-      system: MES_CHAT_SYSTEM_PROMPT.replace("{{CONTEXT}}", context),
-      messages: history.map((m) => ({ role: m.role, content: m.content })),
-    });
+  const finalConversationId = conversationId;
 
-    const textBlock = response.content.find((b) => b.type === "text");
-    const replyText = textBlock && textBlock.type === "text" ? textBlock.text : "Sorry, daar kwam geen antwoord uit. Probeer het nog eens.";
+  // Sonnet-antwoorden met volledige gespreksgeschiedenis kunnen 10-20+ seconden duren om
+  // volledig te genereren — zonder streaming zit de gebruiker die hele tijd naar een statische
+  // "denkt na"-indicator te staren, wat aanvoelt als "geen antwoord". We streamen de tekst dus
+  // via Server-Sent Events zodat het antwoord meteen zichtbaar begint te verschijnen.
+  const stream = new ReadableStream({
+    async start(controller) {
+      controller.enqueue(sseEvent("meta", { conversationId: finalConversationId }));
 
-    const { data: assistantMessage, error: insertAssistantError } = await supabase
-      .from("chat_messages")
-      .insert({ conversation_id: conversationId, role: "assistant", content: replyText })
-      .select()
-      .single();
+      try {
+        const anthropic = getAnthropicClient();
+        const messageStream = anthropic.messages.stream({
+          model: CLAUDE_MODEL,
+          max_tokens: 1024,
+          system: MES_CHAT_SYSTEM_PROMPT.replace("{{CONTEXT}}", context),
+          messages: history.map((m) => ({ role: m.role, content: m.content })),
+        });
 
-    if (insertAssistantError) throw insertAssistantError;
+        messageStream.on("text", (delta) => {
+          controller.enqueue(sseEvent("delta", { text: delta }));
+        });
 
-    await supabase.from("chat_conversations").update({ updated_at: new Date().toISOString() }).eq("id", conversationId);
+        const finalMessage = await messageStream.finalMessage();
+        const textBlock = finalMessage.content.find((b) => b.type === "text");
+        const replyText =
+          textBlock && textBlock.type === "text" ? textBlock.text : "Sorry, daar kwam geen antwoord uit. Probeer het nog eens.";
 
-    return NextResponse.json({ conversationId, message: assistantMessage });
-  } catch {
-    return NextResponse.json({ error: "Mes kon niet antwoorden. Probeer het opnieuw." }, { status: 502 });
-  }
+        const { data: assistantMessage, error: insertAssistantError } = await supabase
+          .from("chat_messages")
+          .insert({ conversation_id: finalConversationId, role: "assistant", content: replyText })
+          .select()
+          .single();
+
+        if (insertAssistantError) throw insertAssistantError;
+
+        await supabase
+          .from("chat_conversations")
+          .update({ updated_at: new Date().toISOString() })
+          .eq("id", finalConversationId);
+
+        controller.enqueue(sseEvent("done", { message: assistantMessage }));
+      } catch {
+        controller.enqueue(sseEvent("error", { error: "Mes kon niet antwoorden. Probeer het opnieuw." }));
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
 }

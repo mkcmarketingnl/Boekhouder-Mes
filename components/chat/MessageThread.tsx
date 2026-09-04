@@ -9,6 +9,8 @@ import type { ChatMessage } from "@/lib/types";
 const NEW_CONVERSATION_NOTE =
   "Hoi, ik ben Mes! Vraag me gerust of iets fiscaal slim is of aftrekbaar. Even eerlijk: ik ben geen erkende fiscalist — bij een grote of ingewikkelde beslissing raad ik altijd aan het ook met een boekhouder te bespreken.";
 
+const STREAMING_MESSAGE_ID = "streaming-reply";
+
 export function MessageThread({
   conversationId,
   onConversationCreated,
@@ -22,8 +24,14 @@ export function MessageThread({
   const [loadingHistory, setLoadingHistory] = useState(!!conversationId);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const skipNextHistoryFetch = useRef(false);
 
   useEffect(() => {
+    if (skipNextHistoryFetch.current) {
+      skipNextHistoryFetch.current = false;
+      return;
+    }
+
     let cancelled = false;
 
     Promise.resolve().then(async () => {
@@ -34,6 +42,7 @@ export function MessageThread({
         }
         return;
       }
+      setLoadingHistory(true);
       const supabase = createClient();
       const { data } = await supabase
         .from("chat_messages")
@@ -71,23 +80,72 @@ export function MessageThread({
     setMessages((prev) => [...prev, optimisticMessage]);
     setInput("");
 
+    let activeConversationId = conversationId;
+    let streamingText = "";
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ conversationId, message: text }),
       });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error ?? "Mes kon niet antwoorden.");
-        return;
+
+      if (!res.body) throw new Error("Geen stream ontvangen.");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let separatorIndex: number;
+        while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
+          const rawEvent = buffer.slice(0, separatorIndex);
+          buffer = buffer.slice(separatorIndex + 2);
+
+          const eventMatch = rawEvent.match(/^event: (.+)$/m);
+          const dataMatch = rawEvent.match(/^data: (.+)$/m);
+          if (!eventMatch || !dataMatch) continue;
+
+          const eventName = eventMatch[1];
+          const data = JSON.parse(dataMatch[1]);
+
+          if (eventName === "meta") {
+            if (!activeConversationId) {
+              activeConversationId = data.conversationId;
+              skipNextHistoryFetch.current = true;
+              onConversationCreated(data.conversationId);
+            }
+          } else if (eventName === "delta") {
+            streamingText += data.text;
+            const streamingSnapshot = streamingText;
+            setMessages((prev) => [
+              ...prev.filter((m) => m.id !== STREAMING_MESSAGE_ID),
+              {
+                id: STREAMING_MESSAGE_ID,
+                conversation_id: activeConversationId ?? "",
+                role: "assistant",
+                content: streamingSnapshot,
+                created_at: new Date().toISOString(),
+              },
+            ]);
+          } else if (eventName === "done") {
+            setMessages((prev) => [
+              ...prev.filter((m) => m.id !== STREAMING_MESSAGE_ID),
+              data.message as ChatMessage,
+            ]);
+          } else if (eventName === "error") {
+            setError(data.error ?? "Mes kon niet antwoorden.");
+            setMessages((prev) => prev.filter((m) => m.id !== STREAMING_MESSAGE_ID));
+          }
+        }
       }
-      if (!conversationId) {
-        onConversationCreated(json.conversationId);
-      }
-      setMessages((prev) => [...prev, json.message as ChatMessage]);
     } catch {
       setError("Mes kon niet antwoorden. Probeer het opnieuw.");
+      setMessages((prev) => prev.filter((m) => m.id !== STREAMING_MESSAGE_ID));
     } finally {
       setSending(false);
     }
@@ -118,7 +176,7 @@ export function MessageThread({
             ))}
           </>
         )}
-        {sending && (
+        {sending && !messages.some((m) => m.id === STREAMING_MESSAGE_ID) && (
           <div className="flex items-center gap-2 text-[12.5px] text-muted">
             <Loader2 size={13} className="spin" />
             Mes denkt na...
