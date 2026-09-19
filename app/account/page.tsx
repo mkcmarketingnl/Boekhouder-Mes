@@ -51,9 +51,9 @@ async function verifyCheckoutSession(sessionId: string, userId: string): Promise
 export default async function AccountPage({
   searchParams,
 }: {
-  searchParams: Promise<{ checkout?: string; session_id?: string }>;
+  searchParams: Promise<{ checkout?: string; session_id?: string; portal?: string }>;
 }) {
-  const { checkout, session_id } = await searchParams;
+  const { checkout, session_id, portal } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -67,6 +67,8 @@ export default async function AccountPage({
     if (ok) redirect("/dashboard");
     checkoutFailed = true;
   }
+  const checkoutErrored = checkout === "error";
+  const portalErrored = portal === "error";
 
   const { hasAccess, billing } = await getAccessStatus(user.id);
 
@@ -92,6 +94,20 @@ export default async function AccountPage({
         <p className="fade-up mb-4 rounded-md border border-warn/30 bg-warn-bg px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warn">
           We konden je betaling nog niet bevestigen. Is er geld afgeschreven? Ververs deze pagina
           over een minuutje — komt het dan nog niet in orde, neem dan contact op.
+        </p>
+      )}
+
+      {checkoutErrored && (
+        <p className="fade-up mb-4 rounded-md border border-warn/30 bg-warn-bg px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warn">
+          Het starten van de betaling is niet gelukt. Er is nog niets afgeschreven — probeer het
+          nog eens, en neem contact op als dit blijft gebeuren.
+        </p>
+      )}
+
+      {portalErrored && (
+        <p className="fade-up mb-4 rounded-md border border-warn/30 bg-warn-bg px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warn">
+          Je abonnementsbeheer kon niet worden geopend. Probeer het nog eens, en neem contact op
+          als dit blijft gebeuren.
         </p>
       )}
 
