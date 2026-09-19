@@ -11,6 +11,11 @@ import type { ChatMessage, Profile, Transaction } from "@/lib/types";
 const MAX_TITLE_LENGTH = 48;
 const encoder = new TextEncoder();
 
+// Complexe fiscale vragen genereren soms lange, uitgewerkte antwoorden — genoeg ruimte geven
+// zodat Claude niet halverwege wordt afgekapt, en de functie genoeg tijd geven om dat volledig
+// te streamen zonder dat het platform de verbinding eerder dichtgooit.
+export const maxDuration = 60;
+
 function sseEvent(event: string, data: unknown) {
   return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
@@ -131,7 +136,7 @@ export async function POST(request: NextRequest) {
         const anthropic = getAnthropicClient();
         const messageStream = anthropic.messages.stream({
           model: CLAUDE_MODEL,
-          max_tokens: 1024,
+          max_tokens: 8192,
           system: MES_CHAT_SYSTEM_PROMPT.replace("{{CONTEXT}}", context),
           messages: history.map((m) => ({ role: m.role, content: m.content })),
         });
@@ -142,8 +147,17 @@ export async function POST(request: NextRequest) {
 
         const finalMessage = await messageStream.finalMessage();
         const textBlock = finalMessage.content.find((b) => b.type === "text");
-        const replyText =
+        let replyText =
           textBlock && textBlock.type === "text" ? textBlock.text : "Sorry, daar kwam geen antwoord uit. Probeer het nog eens.";
+
+        // Zelfs met een ruime max_tokens kan een heel uitgebreid antwoord nog worden afgekapt —
+        // laat dat dan expliciet weten in plaats van een zin die midden in een woord ophoudt,
+        // dat oogt anders alsof de chat het simpelweg niet meer doet.
+        if (finalMessage.stop_reason === "max_tokens") {
+          const streamingSuffix = "\n\n*(Dit antwoord werd erg lang en is hier afgekapt — vraag gerust door voor de rest.)*";
+          replyText += streamingSuffix;
+          controller.enqueue(sseEvent("delta", { text: streamingSuffix }));
+        }
 
         const { data: assistantMessage, error: insertAssistantError } = await supabase
           .from("chat_messages")
@@ -159,7 +173,8 @@ export async function POST(request: NextRequest) {
           .eq("id", finalConversationId);
 
         controller.enqueue(sseEvent("done", { message: assistantMessage }));
-      } catch {
+      } catch (err) {
+        console.error("Chat-antwoord genereren mislukt:", err);
         controller.enqueue(sseEvent("error", { error: "Mes kon niet antwoorden. Probeer het opnieuw." }));
       } finally {
         controller.close();

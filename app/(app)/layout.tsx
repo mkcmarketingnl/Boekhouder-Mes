@@ -53,7 +53,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+      {/* min-w-0: main is a flex item in a flex-col page, so without this its cross-axis
+          (width) can be forced wider than the viewport by any wide-intrinsic-width content
+          inside — same class of bug as on Card, just one level higher up the tree. */}
+      <main className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 py-6 sm:px-6 sm:py-8">{children}</main>
       <FooterDisclaimer />
       <ChatWidget />
     </div>

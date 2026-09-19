@@ -82,6 +82,7 @@ export function MessageThread({
 
     let activeConversationId = conversationId;
     let streamingText = "";
+    let reachedEnd = false;
 
     try {
       const res = await fetch("/api/chat", {
@@ -133,15 +134,25 @@ export function MessageThread({
               },
             ]);
           } else if (eventName === "done") {
+            reachedEnd = true;
             setMessages((prev) => [
               ...prev.filter((m) => m.id !== STREAMING_MESSAGE_ID),
               data.message as ChatMessage,
             ]);
           } else if (eventName === "error") {
+            reachedEnd = true;
             setError(data.error ?? "Mes kon niet antwoorden.");
             setMessages((prev) => prev.filter((m) => m.id !== STREAMING_MESSAGE_ID));
           }
         }
+      }
+
+      // De verbinding kan afbreken (platform-timeout, netwerkwissel) vóórdat een "done" of
+      // "error"-event binnenkwam — dan zou er anders een half antwoord blijven staan zonder dat
+      // het ooit is opgeslagen, en zonder enige foutmelding. Dat voelt precies aan als "de chat
+      // doet het niet", dus behandel een onvolledige stream expliciet als mislukt.
+      if (!reachedEnd) {
+        throw new Error("Stream eindigde onverwacht.");
       }
     } catch {
       setError("Mes kon niet antwoorden. Probeer het opnieuw.");

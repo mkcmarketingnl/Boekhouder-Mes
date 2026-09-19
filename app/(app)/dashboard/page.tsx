@@ -139,12 +139,12 @@ export default async function DashboardPage({
 
       <p className="text-[12.5px] leading-relaxed text-muted">{btwUitlegzin(snapshot.btwSaldo, label)}</p>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <TaxEstimateCard estimate={taxEstimate} jaar={new Date().getFullYear()} />
         <FiscalTips />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
         <RevenueChart data={trend} />
         <div>
           <h2 className="display mb-3 text-[15px] font-semibold">
