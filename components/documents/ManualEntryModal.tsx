@@ -73,7 +73,7 @@ export function ManualEntryModal({
       setError(saveError);
       return;
     }
-    onSaved(`Handmatig toegevoegd — ${type === "omzet" ? "+" : "−"}€${Number(bedragInclBtw).toFixed(2)}`);
+    onSaved(`Handmatig toegevoegd — ${type === "omzet" ? "+" : "−"}${formatCurrency(Number(bedragInclBtw))}`);
   }
 
   return (

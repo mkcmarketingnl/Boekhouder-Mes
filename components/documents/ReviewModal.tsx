@@ -79,7 +79,7 @@ export function ReviewModal({
       setError(saveError);
       return;
     }
-    onSaved(`${leverancier} opgeslagen — ${type === "omzet" ? "+" : "−"}€${Number(bedragInclBtw).toFixed(2)}`);
+    onSaved(`${leverancier} opgeslagen — ${type === "omzet" ? "+" : "−"}${formatCurrency(Number(bedragInclBtw))}`);
   }
 
   return (

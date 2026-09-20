@@ -10,6 +10,7 @@ import { ReviewModal } from "@/components/documents/ReviewModal";
 import { ManualEntryModal } from "@/components/documents/ManualEntryModal";
 import { prepareUploadFile } from "@/lib/imageCompress";
 import { saveTransaction, checkDuplicateFactuur } from "@/lib/transactions";
+import { formatCurrency } from "@/lib/format";
 import type { ExtractedInvoiceData, Transaction } from "@/lib/types";
 
 const ACCEPTED = "image/*,application/pdf,.heic,.heif";
@@ -98,7 +99,7 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
           return { documentId: doc.id, extracted, duplicaatVan };
         }
         showToast(
-          `${extracted.leverancier ?? "Bon"} automatisch herkend en toegevoegd — €${(extracted.bedrag_incl_btw ?? 0).toFixed(2)}`
+          `${extracted.leverancier ?? "Bon"} automatisch herkend en toegevoegd — ${formatCurrency(extracted.bedrag_incl_btw ?? 0)}`
         );
         return null;
       }
