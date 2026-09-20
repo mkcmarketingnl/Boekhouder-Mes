@@ -16,14 +16,64 @@ export function FiscalTips() {
   async function generate() {
     setLoading(true);
     setError(null);
+    setTips([]);
+    let reachedEnd = false;
+    let streamingIndex = 0;
+
     try {
       const res = await fetch("/api/tips/generate", { method: "POST" });
-      const json = await res.json().catch(() => null);
-      if (!res.ok) {
-        setError(json?.error ?? "Tips konden niet worden gegenereerd.");
-        return;
+      if (!res.body) throw new Error("Geen stream ontvangen.");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let separatorIndex: number;
+        while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
+          const rawEvent = buffer.slice(0, separatorIndex);
+          buffer = buffer.slice(separatorIndex + 2);
+
+          const eventMatch = rawEvent.match(/^event: (.+)$/m);
+          const dataMatch = rawEvent.match(/^data: (.+)$/m);
+          if (!eventMatch || !dataMatch) continue;
+
+          const eventName = eventMatch[1];
+          const data = JSON.parse(dataMatch[1]);
+
+          if (eventName === "tip") {
+            streamingIndex += 1;
+            setTips((prev) => [
+              ...prev,
+              {
+                id: `streaming-${streamingIndex}`,
+                user_id: "",
+                gegenereerd_op: new Date().toISOString(),
+                tip_tekst: data.text,
+                context_snapshot: null,
+              },
+            ]);
+          } else if (eventName === "done") {
+            reachedEnd = true;
+            setTips((data.data ?? []) as AiTip[]);
+          } else if (eventName === "error") {
+            reachedEnd = true;
+            setError(data.error ?? "Tips konden niet worden gegenereerd.");
+            setTips([]);
+          }
+        }
       }
-      setTips(json?.data ?? []);
+
+      if (!reachedEnd) {
+        throw new Error("Stream eindigde onverwacht.");
+      }
+    } catch {
+      setError((prev) => prev ?? "Tips konden niet worden gegenereerd. Probeer het later opnieuw.");
+      setTips((prev) => (prev.length > 0 && prev[0]?.user_id === "" ? [] : prev));
     } finally {
       setLoading(false);
     }
@@ -41,7 +91,7 @@ export function FiscalTips() {
         </Button>
       </div>
 
-      {loading && (
+      {loading && tips.length === 0 && (
         <div className="flex items-center gap-2 rounded-md border border-line bg-paper-dark px-3.5 py-2.5 text-[12.5px] text-ink">
           <Loader2 size={14} className="spin" />
           Je cijfers worden geanalyseerd...
@@ -57,17 +107,23 @@ export function FiscalTips() {
         </p>
       )}
 
-      {!loading && tips.length > 0 && (
+      {tips.length > 0 && (
         <ul className="space-y-3">
           {tips.map((tip) => (
-            <li key={tip.id} className="flex gap-2.5 border-b border-line pb-3 text-[13px] leading-relaxed last:border-b-0">
+            <li key={tip.id} className="slide-down flex gap-2.5 border-b border-line pb-3 text-[13px] leading-relaxed last:border-b-0">
               <Lightbulb size={14} className="mt-0.5 shrink-0 text-warn" />
               <div>
                 <p className="text-ink">{tip.tip_tekst}</p>
-                <p className="mt-1 text-[11px] text-muted">{formatDate(tip.gegenereerd_op)}</p>
+                {tip.user_id && <p className="mt-1 text-[11px] text-muted">{formatDate(tip.gegenereerd_op)}</p>}
               </div>
             </li>
           ))}
+          {loading && (
+            <li className="flex items-center gap-2 text-[12px] text-muted">
+              <Loader2 size={12} className="spin" />
+              Nog een tip onderweg...
+            </li>
+          )}
         </ul>
       )}
 

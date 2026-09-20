@@ -1,14 +1,34 @@
-import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getAnthropicClient, CLAUDE_MODEL } from "@/lib/anthropic/client";
+import { getAnthropicClient, CLAUDE_MODEL_FAST } from "@/lib/anthropic/client";
 import { getAccessStatus } from "@/lib/subscription";
-import { TIPS_SYSTEM_PROMPT, buildTipsUserPrompt, parseClaudeJson } from "@/lib/anthropic/prompts";
+import { TIPS_SYSTEM_PROMPT, buildTipsUserPrompt } from "@/lib/anthropic/prompts";
 import { aggregateTransactions, getPeriodBounds, groupByLeverancier } from "@/lib/finance";
 import { estimateIncomeTax } from "@/lib/tax";
 import { formatDateInput } from "@/lib/format";
 import type { Profile, Transaction } from "@/lib/types";
 
 export const maxDuration = 30;
+
+const encoder = new TextEncoder();
+
+function sseEvent(event: string, data: unknown) {
+  return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+function errorResponse(error: string, status: number) {
+  return new Response(sseEvent("error", { error }), {
+    status,
+    headers: { "Content-Type": "text/event-stream" },
+  });
+}
+
+// Tips staan op losse "TIP: ..." regels (zie TIPS_SYSTEM_PROMPT) i.p.v. in JSON, juist om ze
+// stukje bij beetje te kunnen streamen — bij elke binnenkomende chunk checken we hoeveel volledige
+// tips er inmiddels in de buffer staan (alles vóór de laatste "TIP:"-marker is per definitie af).
+function parseCompleteTips(buffer: string): string[] {
+  const parts = buffer.split(/\n?TIP:\s*/).filter((s) => s.trim().length > 0);
+  return parts;
+}
 
 export async function POST() {
   const supabase = await createClient();
@@ -17,23 +37,19 @@ export async function POST() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: "Niet ingelogd." }, { status: 401 });
+    return errorResponse("Niet ingelogd.", 401);
   }
 
   const { hasAccess } = await getAccessStatus(user.id);
   if (!hasAccess) {
-    return NextResponse.json({ error: "Geen actief abonnement." }, { status: 403 });
+    return errorResponse("Geen actief abonnement.", 403);
   }
 
-  const { data: profileRow } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("user_id", user.id)
-    .single();
+  const { data: profileRow } = await supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle();
   const profile = profileRow as Profile | null;
 
   if (!profile) {
-    return NextResponse.json({ error: "Bedrijfsprofiel ontbreekt." }, { status: 400 });
+    return errorResponse("Bedrijfsprofiel ontbreekt.", 400);
   }
 
   const jaar = new Date().getFullYear();
@@ -67,54 +83,79 @@ export async function POST() {
     topRelaties,
   });
 
-  // Eén automatische herkansing bij een mislukte generatie (bijv. een afgekapt of licht
-  // vervuild antwoord) voordat we de gebruiker een foutmelding tonen — dit soort transiënte
-  // fouten treft anders relatief vaak dezelfde gebruikers en voelt dan structureel kapot aan.
-  let lastError: unknown = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const anthropic = getAnthropicClient();
-      const response = await anthropic.messages.create({
-        model: CLAUDE_MODEL,
-        max_tokens: 2048,
-        system: TIPS_SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userPrompt }],
-      });
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const anthropic = getAnthropicClient();
+        const messageStream = anthropic.messages.stream({
+          model: CLAUDE_MODEL_FAST,
+          max_tokens: 1024,
+          system: TIPS_SYSTEM_PROMPT,
+          messages: [{ role: "user", content: userPrompt }],
+        });
 
-      const textBlock = response.content.find((b) => b.type === "text");
-      if (!textBlock || textBlock.type !== "text") {
-        throw new Error("Geen tekstantwoord van AI ontvangen.");
+        let buffer = "";
+        let emittedCount = 0;
+
+        messageStream.on("text", (delta) => {
+          buffer += delta;
+          // De laatste tip in de buffer kan nog aan het groeien zijn (nog geen volgende "TIP:"
+          // marker gezien) — die pas als "af" beschouwen zodra er ofwel een volgende tip start,
+          // ofwel de stream helemaal klaar is (hieronder na finalMessage()).
+          const parts = parseCompleteTips(buffer);
+          const completeCount = Math.max(0, parts.length - 1);
+          for (let i = emittedCount; i < completeCount; i++) {
+            controller.enqueue(sseEvent("tip", { text: parts[i].trim() }));
+          }
+          emittedCount = completeCount;
+        });
+
+        await messageStream.finalMessage();
+
+        const allTips = parseCompleteTips(buffer)
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .slice(0, 5);
+
+        for (let i = emittedCount; i < allTips.length; i++) {
+          controller.enqueue(sseEvent("tip", { text: allTips[i] }));
+        }
+
+        if (allTips.length === 0) {
+          throw new Error("Leeg of ongeldig tips-antwoord.");
+        }
+
+        const contextSnapshot = { jaar, ...snapshot, geschatteBelasting: belasting.bedrag };
+        const rows = allTips.map((tip_tekst) => ({
+          user_id: user.id,
+          tip_tekst,
+          context_snapshot: contextSnapshot,
+        }));
+
+        // Tips worden elk bezoek vers gegenereerd (geen stale tips bij terugkomst) — de oude set
+        // vervangen we dus bij elke generatie i.p.v. te blijven stapelen, anders groeit de tabel
+        // ongelimiteerd terwijl de oude rijen toch nooit meer getoond worden.
+        await supabase.from("ai_tips").delete().eq("user_id", user.id);
+        const { data: inserted, error: insertError } = await supabase.from("ai_tips").insert(rows).select();
+        if (insertError) throw insertError;
+
+        controller.enqueue(sseEvent("done", { data: inserted }));
+      } catch (err) {
+        console.error("Tips genereren mislukt:", err);
+        controller.enqueue(
+          sseEvent("error", { error: "Tips konden niet worden gegenereerd. Probeer het later opnieuw." })
+        );
+      } finally {
+        controller.close();
       }
+    },
+  });
 
-      const { tips } = parseClaudeJson<{ tips: string[] }>(textBlock.text);
-      if (!Array.isArray(tips) || tips.length === 0) {
-        throw new Error("Leeg of ongeldig tips-antwoord.");
-      }
-      const contextSnapshot = { jaar, ...snapshot, geschatteBelasting: belasting.bedrag };
-
-      const rows = tips.slice(0, 5).map((tip_tekst) => ({
-        user_id: user.id,
-        tip_tekst,
-        context_snapshot: contextSnapshot,
-      }));
-
-      // Tips worden elk bezoek vers gegenereerd (geen stale tips bij terugkomst) — de oude set
-      // vervangen we dus bij elke generatie i.p.v. te blijven stapelen, anders groeit de tabel
-      // ongelimiteerd terwijl de oude rijen toch nooit meer getoond worden.
-      await supabase.from("ai_tips").delete().eq("user_id", user.id);
-
-      const { data: inserted, error: insertError } = await supabase.from("ai_tips").insert(rows).select();
-      if (insertError) throw insertError;
-
-      return NextResponse.json({ data: inserted });
-    } catch (err) {
-      lastError = err;
-    }
-  }
-
-  console.error("Tips genereren mislukt na herkansing:", lastError);
-  return NextResponse.json(
-    { error: "Tips konden niet worden gegenereerd. Probeer het later opnieuw." },
-    { status: 502 }
-  );
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
 }
