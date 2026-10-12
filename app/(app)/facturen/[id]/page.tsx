@@ -81,7 +81,7 @@ export default async function FactuurPage({ params }: { params: Promise<{ id: st
         {terug}
         <h1 className="display text-2xl font-semibold">Factuur {factuur.factuurnummer}</h1>
         <p className="mt-1 text-sm text-muted">
-          Definitief{factuur.gewijzigd_op ? ` · aangepast op ${formatDate(factuur.gewijzigd_op.slice(0, 10))}` : ""}
+          Definitief{factuur.gewijzigd_op ? ` · aangepast op ${formatDate(new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Amsterdam" }).format(new Date(factuur.gewijzigd_op)))}` : ""}
           {factuur.eerdere_versies && factuur.eerdere_versies.length > 0 ? ` · ${factuur.eerdere_versies.length} eerdere ${factuur.eerdere_versies.length === 1 ? "versie" : "versies"} bewaard` : ""}
         </p>
       </div>
