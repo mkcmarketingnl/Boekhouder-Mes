@@ -61,7 +61,13 @@ export interface ExtractedInvoiceData {
   leesbaarheid: Leesbaarheid;
   risico: RisicoNiveau;
   risico_toelichting: string | null;
+  // Uitkomst van de dubbele scan + controles (zie lib/extraction.ts). Alleen "akkoord" mag automatisch
+  // worden opgeslagen; alles anders gaat altijd langs de gebruiker.
+  controle_status?: ControleStatus;
+  controle_afwijkingen?: string[];
 }
+
+export type ControleStatus = "akkoord" | "afwijking" | "niet_geverifieerd";
 
 export interface DocumentRecord {
   id: string;

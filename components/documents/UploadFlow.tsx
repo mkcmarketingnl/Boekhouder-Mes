@@ -20,6 +20,8 @@ interface PendingReview {
   documentId: string;
   extracted: ExtractedInvoiceData | null;
   duplicaatVan?: Transaction | null;
+  previewUrl?: string | null;
+  isPdf?: boolean;
 }
 
 export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; defaultBtwPercentage: number }) {
@@ -69,6 +71,11 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
       const json = await res.json();
       const extracted: ExtractedInvoiceData | null = json?.data ?? null;
 
+      // Originele scan meegeven aan het controlescherm, zodat de gebruiker de gegevens naast het document kan leggen.
+      const { data: signed } = await supabase.storage.from("documents").createSignedUrl(path, 3600);
+      const previewUrl = signed?.signedUrl ?? null;
+      const isPdf = ext === "pdf";
+
       const duplicaatVan = extracted
         ? await checkDuplicateFactuur(userId, extracted.leverancier ?? "", extracted.factuurnummer)
         : null;
@@ -78,6 +85,8 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
         extracted.leesbaarheid === "goed" &&
         extracted.risico === "laag" &&
         !extracted.type_onzeker &&
+        // Alleen automatisch opslaan als de dubbele scan + controles overal akkoord zijn.
+        extracted.controle_status === "akkoord" &&
         !duplicaatVan;
 
       if (autoSaveOk && extracted) {
@@ -96,7 +105,7 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
           invoerwijze: "ai",
         });
         if (saveError) {
-          return { documentId: doc.id, extracted, duplicaatVan };
+          return { documentId: doc.id, extracted, duplicaatVan, previewUrl, isPdf };
         }
         showToast(
           `${extracted.leverancier ?? "Bon"} automatisch herkend en toegevoegd — ${formatCurrency(extracted.bedrag_incl_btw ?? 0)}`
@@ -104,7 +113,7 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
         return null;
       }
 
-      return { documentId: doc.id, extracted, duplicaatVan };
+      return { documentId: doc.id, extracted, duplicaatVan, previewUrl, isPdf };
     },
     [userId, defaultBtwPercentage, showToast]
   );
@@ -208,6 +217,8 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
           documentId={currentReview.documentId}
           extracted={currentReview.extracted}
           duplicaatVan={currentReview.duplicaatVan ?? null}
+          previewUrl={currentReview.previewUrl ?? null}
+          isPdf={currentReview.isPdf ?? false}
           userId={userId}
           defaultBtwPercentage={defaultBtwPercentage}
           queuePosition={reviewQueueTotal > 1 ? queuePosition : undefined}

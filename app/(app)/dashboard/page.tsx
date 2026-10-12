@@ -126,9 +126,9 @@ export default async function DashboardPage({
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Omzet" value={snapshot.omzet} icon={<TrendingUp size={15} className="text-ok" />} />
-        <StatCard label="Kosten" value={snapshot.kosten} icon={<TrendingDown size={15} className="text-stamp" />} />
-        <StatCard label="Winst" value={snapshot.winst} icon={<PiggyBank size={15} className="text-paper/70" />} highlight />
+        <StatCard label="Omzet" suffix="excl. btw" value={snapshot.omzet} icon={<TrendingUp size={15} className="text-ok" />} />
+        <StatCard label="Kosten" suffix="excl. btw" value={snapshot.kosten} icon={<TrendingDown size={15} className="text-stamp" />} />
+        <StatCard label="Winst" suffix="excl. btw" value={snapshot.winst} icon={<PiggyBank size={15} className="text-paper/70" />} highlight />
         <StatCard
           label={`BTW-saldo (${periodType})`}
           value={Math.abs(snapshot.btwSaldo)}
@@ -148,7 +148,7 @@ export default async function DashboardPage({
         <RevenueChart data={trend} />
         <div>
           <h2 className="display mb-3 text-[15px] font-semibold">
-            Documenten {isCurrentPeriod ? "" : `— ${label}`}
+            Documenten {isCurrentPeriod ? "" : `— ${label}`} <span className="text-xs font-normal text-muted">(bedragen incl. btw)</span>
           </h2>
           {rows.length === 0 ? (
             <div className="rounded-md border border-dashed border-line px-5 py-8 text-center text-[13px] text-muted">

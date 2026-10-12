@@ -67,9 +67,9 @@ export async function POST() {
 
   const alleTransacties = (transactions ?? []) as Transaction[];
   const topRelaties = [...groupByLeverancier(alleTransacties, "kosten"), ...groupByLeverancier(alleTransacties, "omzet")]
-    .sort((a, b) => b.totaal - a.totaal)
+    .sort((a, b) => b.totaalExcl - a.totaalExcl)
     .slice(0, 5)
-    .map((r) => ({ naam: r.naam, totaal: r.totaal, aantal: r.aantal }));
+    .map((r) => ({ naam: r.naam, totaal: r.totaalExcl, aantal: r.aantal }));
 
   const userPrompt = buildTipsUserPrompt({
     rechtsvorm: profile.rechtsvorm,

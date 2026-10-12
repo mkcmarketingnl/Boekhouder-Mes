@@ -17,6 +17,12 @@ export function getAnthropicClient(): Anthropic {
 // Sonnet voor tips/BTW-suggestie (weinig aanroepen, kwaliteit van de tekst telt).
 export const CLAUDE_MODEL = "claude-sonnet-5";
 
-// Haiku voor het scannen van bonnen/facturen (verreweg de meeste AI-aanroepen,
-// en vision-OCR + eenvoudige risicobeoordeling heeft geen Sonnet-niveau nodig).
+// Haiku blijft beschikbaar voor goedkope, niet-kritieke taken. NIET gebruiken voor het scannen van
+// facturen: in onze meting las Haiku 4.5 jaartallen, namen en het type (kosten/omzet) regelmatig fout.
 export const CLAUDE_MODEL_FAST = "claude-haiku-4-5-20251001";
+
+// Scannen van bonnen/facturen: elke fout daarin belandt in de boekhouding van de gebruiker, dus hier
+// gebruiken we een sterk model (Sonnet 5.5 las alle testfacturen foutloos), twee keer onafhankelijk,
+// met Opus 5.5 als scheidsrechter zodra de twee scans elkaar tegenspreken.
+export const CLAUDE_MODEL_EXTRACT = "claude-sonnet-5-5";
+export const CLAUDE_MODEL_ARBITER = "claude-opus-5-5";

@@ -69,28 +69,37 @@ export interface FinancialSnapshot {
 }
 
 export function aggregateTransactions(transactions: Transaction[]): FinancialSnapshot {
+  // Alles in hele centen optellen en pas aan het eind terug naar euro's: zo geeft het dashboard en
+  // elke andere lijst (bijv. Klanten & Leveranciers) altijd exact dezelfde totalen.
   let omzet = 0;
   let kosten = 0;
   let btwOntvangen = 0;
   let btwBetaald = 0;
-  const kostenPerCategorie: Record<string, number> = {};
+  const kostenPerCategorieCenten: Record<string, number> = {};
 
   for (const t of transactions) {
+    const excl = Math.round(t.bedrag_excl_btw * 100);
+    const btw = Math.round(t.btw_bedrag * 100);
     if (t.type === "kosten") {
-      kosten += t.bedrag_excl_btw;
-      btwBetaald += t.btw_bedrag;
-      kostenPerCategorie[t.categorie] = (kostenPerCategorie[t.categorie] ?? 0) + t.bedrag_excl_btw;
+      kosten += excl;
+      btwBetaald += btw;
+      kostenPerCategorieCenten[t.categorie] = (kostenPerCategorieCenten[t.categorie] ?? 0) + excl;
     } else {
-      omzet += t.bedrag_excl_btw;
-      btwOntvangen += t.btw_bedrag;
+      omzet += excl;
+      btwOntvangen += btw;
     }
   }
 
+  const kostenPerCategorie: Record<string, number> = {};
+  for (const [categorie, centen] of Object.entries(kostenPerCategorieCenten)) {
+    kostenPerCategorie[categorie] = centen / 100;
+  }
+
   return {
-    omzet,
-    kosten,
-    winst: omzet - kosten,
-    btwSaldo: btwOntvangen - btwBetaald,
+    omzet: omzet / 100,
+    kosten: kosten / 100,
+    winst: (omzet - kosten) / 100,
+    btwSaldo: (btwOntvangen - btwBetaald) / 100,
     kostenPerCategorie,
   };
 }
@@ -123,40 +132,47 @@ export function groupMonthlyTrend(transactions: Transaction[], monthsCount = 6):
 export interface RelatieSamenvatting {
   sleutel: string;
   naam: string;
-  totaal: number;
+  // Excl. BTW = dezelfde maatstaf als Omzet/Kosten op het dashboard (aggregateTransactions); incl. BTW
+  // is wat er daadwerkelijk is gefactureerd/betaald. Beide in hele centen opgeteld, zodat er nooit
+  // afrondingsverschillen ontstaan tussen deze lijst en het dashboard.
+  totaalExcl: number;
+  totaalIncl: number;
   aantal: number;
   laatsteDatum: string;
 }
 
+const naarCenten = (bedrag: number) => Math.round(bedrag * 100);
+
 export function groupByLeverancier(transactions: Transaction[], type: "kosten" | "omzet"): RelatieSamenvatting[] {
   // Groeperen op genormaliseerde naam (zelfde helper als het leveranciers-geheugen), anders
   // splitst dezelfde partij op in losse rijen door kleine schrijfverschillen (hoofdletters,
-  // spaties) tussen facturen — en klopt de "exacte" totaalteller niet meer.
-  const map = new Map<string, RelatieSamenvatting>();
+  // spaties) tussen facturen.
+  const map = new Map<string, { s: RelatieSamenvatting; excl: number; incl: number }>();
 
   for (const t of transactions) {
     if (t.type !== type) continue;
     const key = normalizeSupplierName(t.leverancier) || t.leverancier;
     const bestaand = map.get(key);
     if (bestaand) {
-      bestaand.totaal += t.bedrag_incl_btw;
-      bestaand.aantal += 1;
-      if (t.factuurdatum > bestaand.laatsteDatum) {
-        bestaand.laatsteDatum = t.factuurdatum;
-        bestaand.naam = t.leverancier;
+      bestaand.excl += naarCenten(t.bedrag_excl_btw);
+      bestaand.incl += naarCenten(t.bedrag_incl_btw);
+      bestaand.s.aantal += 1;
+      if (t.factuurdatum > bestaand.s.laatsteDatum) {
+        bestaand.s.laatsteDatum = t.factuurdatum;
+        bestaand.s.naam = t.leverancier;
       }
     } else {
       map.set(key, {
-        sleutel: key,
-        naam: t.leverancier,
-        totaal: t.bedrag_incl_btw,
-        aantal: 1,
-        laatsteDatum: t.factuurdatum,
+        s: { sleutel: key, naam: t.leverancier, totaalExcl: 0, totaalIncl: 0, aantal: 1, laatsteDatum: t.factuurdatum },
+        excl: naarCenten(t.bedrag_excl_btw),
+        incl: naarCenten(t.bedrag_incl_btw),
       });
     }
   }
 
-  return Array.from(map.values()).sort((a, b) => b.totaal - a.totaal);
+  return Array.from(map.values())
+    .map(({ s, excl, incl }) => ({ ...s, totaalExcl: excl / 100, totaalIncl: incl / 100 }))
+    .sort((x, y) => y.totaalExcl - x.totaalExcl);
 }
 
 export function btwUitlegzin(btwSaldo: number, periodeLabel: string): string {

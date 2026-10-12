@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getAnthropicClient, CLAUDE_MODEL_FAST } from "@/lib/anthropic/client";
 import { getAccessStatus } from "@/lib/subscription";
-import {
-  buildExtractionSystemPrompt,
-  buildExtractionUserPrompt,
-  parseClaudeJson,
-} from "@/lib/anthropic/prompts";
+import { scanDocument, nietGeverifieerd } from "@/lib/extraction";
 import { normalizeSupplierName } from "@/lib/types";
 import type { Categorie, ExtractedInvoiceData } from "@/lib/types";
+
+// Twee scans parallel (+ eventueel een derde ter controle) — ruim de tijd geven.
+export const maxDuration = 60;
 
 const EXT_TO_MEDIA_TYPE: Record<string, string> = {
   jpg: "image/jpeg",
@@ -72,63 +70,32 @@ export async function POST(request: NextRequest) {
   const buffer = Buffer.from(await fileBlob.arrayBuffer());
   const base64Data = buffer.toString("base64");
 
+  // Dubbele, onafhankelijke scan met sterke modellen + controles in code (zie lib/extraction.ts).
+  const contentBlock =
+    mediaType === "application/pdf"
+      ? ({
+          type: "document",
+          source: { type: "base64", media_type: mediaType, data: base64Data },
+        } as const)
+      : ({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: mediaType as "image/jpeg" | "image/png" | "image/webp",
+            data: base64Data,
+          },
+        } as const);
+
   let extracted: ExtractedInvoiceData;
-
   try {
-    const anthropic = getAnthropicClient();
-    const contentBlock =
-      mediaType === "application/pdf"
-        ? ({
-            type: "document",
-            source: { type: "base64", media_type: mediaType, data: base64Data },
-          } as const)
-        : ({
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: mediaType as "image/jpeg" | "image/png" | "image/webp",
-              data: base64Data,
-            },
-          } as const);
-
-    const response = await anthropic.messages.create({
-      model: CLAUDE_MODEL_FAST,
-      max_tokens: 1024,
-      system: buildExtractionSystemPrompt(
-        profile?.bedrijfsnaam ?? "",
-        profile?.activiteiten ?? ""
-      ),
-      messages: [
-        {
-          role: "user",
-          content: [contentBlock, { type: "text", text: buildExtractionUserPrompt() }],
-        },
-      ],
+    extracted = await scanDocument({
+      bestand: contentBlock,
+      eigenBedrijfsnaam: profile?.bedrijfsnaam ?? "",
+      activiteiten: profile?.activiteiten ?? "",
     });
-
-    const textBlock = response.content.find((b) => b.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
-      throw new Error("Geen tekstantwoord van AI ontvangen.");
-    }
-
-    extracted = parseClaudeJson<ExtractedInvoiceData>(textBlock.text);
-  } catch {
-    extracted = {
-      leverancier: null,
-      factuurnummer: null,
-      factuurdatum: null,
-      bedrag_incl_btw: null,
-      bedrag_excl_btw: null,
-      btw_bedrag: null,
-      btw_percentage: null,
-      omschrijving: null,
-      voorgestelde_categorie: null,
-      type: null,
-      type_onzeker: true,
-      leesbaarheid: "slecht",
-      risico: "midden",
-      risico_toelichting: "Automatische verwerking is mislukt. Vul de gegevens handmatig in.",
-    };
+  } catch (err) {
+    console.error("Scannen mislukt:", err);
+    extracted = nietGeverifieerd("De scan is niet gelukt.");
   }
 
   // Leveranciers-geheugen: de suppliers-tabel bevat uitsluitend geschiedenis van bevestigde

@@ -16,6 +16,8 @@ interface Props {
   documentId: string;
   extracted: ExtractedInvoiceData | null;
   duplicaatVan?: Transaction | null;
+  previewUrl?: string | null;
+  isPdf?: boolean;
   userId: string;
   defaultBtwPercentage: number;
   queuePosition?: number;
@@ -28,6 +30,8 @@ export function ReviewModal({
   documentId,
   extracted,
   duplicaatVan,
+  previewUrl,
+  isPdf,
   userId,
   defaultBtwPercentage,
   queuePosition,
@@ -103,6 +107,47 @@ export function ReviewModal({
             ? "Controleer de herkende gegevens en pas aan waar nodig."
             : "De scan is niet gelukt. Vul de gegevens hieronder handmatig in."}
         </p>
+
+        {previewUrl && (
+          <div className="mb-4">
+            {isPdf ? (
+              <a
+                href={previewUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="block rounded-md border border-line bg-white px-3.5 py-3 text-[12.5px] text-ink underline"
+              >
+                Open het originele PDF-document om te vergelijken
+              </a>
+            ) : (
+              <a href={previewUrl} target="_blank" rel="noreferrer" className="block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={previewUrl}
+                  alt="Je gescande document"
+                  className="max-h-56 w-full rounded-md border border-line bg-white object-contain"
+                />
+                <span className="mt-1 block text-center text-[11px] text-muted">
+                  Tik om te vergroten — leg het naast de gegevens hieronder
+                </span>
+              </a>
+            )}
+          </div>
+        )}
+
+        {extracted?.controle_afwijkingen && extracted.controle_afwijkingen.length > 0 && (
+          <div className="slide-down mb-4 flex gap-2.5 rounded-md border border-stamp/20 bg-stamp-bg p-3">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0 text-stamp" />
+            <div className="text-[12.5px] leading-relaxed text-ink">
+              <strong>Check dit even goed met je document.</strong>
+              <ul className="mt-1 list-disc space-y-1 pl-4">
+                {extracted.controle_afwijkingen.map((melding) => (
+                  <li key={melding}>{melding}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
 
         {duplicaatVan && (
           <div className="slide-down mb-4 flex gap-2.5 rounded-md border border-warn/30 bg-warn-bg p-3">

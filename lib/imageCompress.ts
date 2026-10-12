@@ -1,10 +1,7 @@
-// 1568px is Anthropic's eigen aanbevolen maximum beeldrand voor vision-modellen — daar precies op
-// uitkomen voorkomt dat de afbeelding serverside nóg een keer wordt verkleind (dubbele
-// downsampling was hier eerder de sluipende oorzaak van slecht leesbare kleine tekst, zoals
-// bedrijfsnamen in een briefhoofd). JPEG-kwaliteit kost bij Claude vision niets extra (tokens
-// worden op pixelaantal berekend, niet op bestandsgrootte/kwaliteit), dus die staat hoog om zo
-// veel mogelijk fijne details van kleine tekst te behouden.
-const MAX_DIMENSION = 1568;
+// 2048px lange rand: de scanmodellen (Sonnet/Opus 5.5) lezen tot 2576px zonder verkleining, en een
+// smalle, staande bonfoto heeft die extra resolutie nodig om kleine cijfers scherp te houden (bij 1568px
+// werd het beeld intern nóg verder verkleind). JPEG-kwaliteit kost niets extra aan tokens, dus hoog.
+const MAX_DIMENSION = 2048;
 const JPEG_QUALITY = 0.92;
 
 export function isHeic(file: File): boolean {

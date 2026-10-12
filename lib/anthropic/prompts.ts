@@ -72,6 +72,9 @@ Antwoord ALTIJD met alleen geldige JSON, zonder markdown-codeblok, exact in dit 
 
 Regels:
 - Als je een bedrag niet zeker kunt aflezen, vul dan null in voor dat veld — nooit gokken of een verzonnen waarde tonen.
+- Namen (de "leverancier") neem je LETTERLIJK over zoals ze op het document staan, inclusief spelling, hoofdletters, punten en rechtsvorm (bijv. "bol.com B.V.", "Albert Heijn", "Kantoorwinkel De Pen B.V."). Corrigeer, vertaal, verkort of "verbeter" niets, en verzin geen naam als je er geen kunt lezen — gebruik dan null.
+- De datum lees je extra zorgvuldig: let vooral op het JAARTAL en op dag/maand-volgorde (Nederlands formaat is dd-mm-jjjj). Vul nooit een datum in die je niet echt op het document ziet staan; bij twijfel over dag, maand of jaar: null.
+- Het totaalbedrag neem je letterlijk over van het document (het bedrag dat de klant uiteindelijk verschuldigd is, incl. BTW, vóór eventuele inhoudingen zoals hieronder beschreven). Controleer vóór je antwoordt of excl. BTW + BTW ongeveer gelijk is aan het totaal; klopt dat niet, lees het document dan opnieuw.
 - "bedrag_incl_btw" is altijd het oorspronkelijke factuurbedrag (het bedrag inclusief BTW zoals dat als hoofdtotaal op de factuur staat) — nooit een lager netto-uitbetaald bedrag na een inhouding zoals hierboven beschreven.
 - Zet "leesbaarheid" op "slecht" als je één of meer kernvelden (bedrag, BTW, datum, naam) niet met vertrouwen kunt lezen, bijvoorbeeld door een schuine hoek, slechte belichting of een onscherpe foto.
 - "risico" gaat over of deze uitgave logisch/zakelijk verdedigbaar is gezien de bedrijfsactiviteiten "{{ACTIVITEITEN}}". Gebruik "hoog" alleen bij overduidelijk privékarakter, "midden" bij twijfel, "laag" als het duidelijk aansluit.
@@ -88,6 +91,31 @@ export function buildExtractionSystemPrompt(eigenBedrijfsnaam: string, activitei
 export function buildExtractionUserPrompt(): string {
   return "Analyseer deze bon of factuur volgens het opgegeven JSON-formaat.";
 }
+
+// Tweede, onafhankelijke leesronde. Bewust ANDERS opgezet dan de extractie hierboven: geen oordeel over
+// kosten/omzet of categorie, alleen letterlijk overschrijven wat er staat — zodat een misser in de ene
+// ronde niet vanzelf in de andere terugkomt. De uitkomsten worden in code met elkaar vergeleken.
+export const TRANSCRIPTIE_SYSTEM_PROMPT = `Je leest een factuur of kassabon en schrijft de kerngegevens LETTERLIJK over. Je beoordeelt niets, categoriseert niets en geeft geen advies.
+
+Antwoord ALTIJD met alleen geldige JSON, zonder markdown-codeblok, exact in dit formaat:
+{
+  "afzender_naam": string | null,
+  "geadresseerde_naam": string | null,
+  "factuurnummer": string | null,
+  "factuurdatum": string | null (formaat YYYY-MM-DD),
+  "totaal_incl_btw": number | null,
+  "totaal_excl_btw": number | null,
+  "btw_bedrag": number | null,
+  "btw_percentage": number | null
+}
+
+Regels:
+- "afzender_naam": de partij die het document heeft opgesteld/uitgegeven (briefhoofd, winkelnaam bovenaan een bon). "geadresseerde_naam": de klant aan wie de factuur is gericht ("Aan:", "Factuuradres", "Debiteur"); bij een kassabon is dit meestal null.
+- Namen schrijf je letterlijk over, tekengetrouw (spelling, hoofdletters, punten, rechtsvorm). Niet verbeteren, niet verkorten, niets verzinnen.
+- "totaal_incl_btw" is het hoofdtotaal dat de klant verschuldigd is, inclusief BTW — bij een bon het bedrag bij "TOTAAL"/"TE BETALEN". Bij meerdere totalen (bijv. een inhouding of "netto te ontvangen" onderaan) kies je het oorspronkelijke factuurbedrag vóór die inhouding.
+- Bij meerdere BTW-tarieven op één document: "btw_percentage" is null en "btw_bedrag" is de som van alle BTW.
+- Datum: let extra op het JAARTAL en op dag/maand-volgorde (Nederlands: dd-mm-jjjj).
+- Kun je iets niet met zekerheid lezen, vul dan null in. Gokken is erger dan null.`;
 
 export const TIPS_SYSTEM_PROMPT = `Je bent een fiscale hulp-assistent voor Nederlandse zelfstandig ondernemers die zelf geen boekhoudkennis hebben. Je geeft GEEN persoonlijk fiscaal advies en bent GEEN vervanging voor een boekhouder — je geeft algemene, oprecht nuttige suggesties op basis van de cijfers die je krijgt.
 
