@@ -11,6 +11,7 @@ import {
   isTabelOntbreekt,
   MIGRATIE_MELDING,
   naarBtwRegels,
+  vandaagNl,
   volgnummerUit,
   type Bevinding,
   type FactuurGegevens,
@@ -41,7 +42,7 @@ function dbFout(error: { code?: string; message?: string }, standaard: string): 
   return isTabelOntbreekt(error) ? MIGRATIE_MELDING : standaard;
 }
 
-const vandaag = () => new Date().toISOString().slice(0, 10);
+const vandaag = vandaagNl;
 
 // ---------- instellingen ----------
 

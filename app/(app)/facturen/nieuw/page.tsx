@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { FactuurEditor } from "@/components/facturen/FactuurEditor";
 import { MigratieNotice } from "@/components/facturen/MigratieNotice";
 import { laadFactuurContext } from "@/lib/facturenContext";
-import { bouwAfzender, formatFactuurnummer } from "@/lib/facturen";
+import { bouwAfzender, formatFactuurnummer, vandaagNl } from "@/lib/facturen";
 
 export default async function NieuweFactuurPage() {
   const supabase = await createClient();
@@ -36,7 +36,7 @@ export default async function NieuweFactuurPage() {
           standaardNotitie={settings.standaard_notitie ?? ""}
           nummerVoorbeeld={formatFactuurnummer(settings.factuurnummer_prefix, settings.volgend_factuurnummer)}
           vorigNummer={vorigNummer}
-          vandaag={new Date().toISOString().slice(0, 10)}
+          vandaag={vandaagNl()}
         />
       )}
     </div>

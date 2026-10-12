@@ -9,6 +9,7 @@ import {
   berekenTotalen,
   controleerFactuur,
   formatFactuurnummer,
+  vandaagNl,
   type AiControle,
   type Bevinding,
   type FactuurGegevens,
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
     notitie: factuur.notitie,
   };
 
-  const vandaag = new Date().toISOString().slice(0, 10);
+  const vandaag = vandaagNl();
   const codeBevindingen = controleerFactuur(gegevens, afzender, { vorigNummer: vorige?.[0]?.factuurnummer ?? null, vandaag });
   const totalen = berekenTotalen(factuur.regels, { btw_verlegd: factuur.btw_verlegd, kor });
 

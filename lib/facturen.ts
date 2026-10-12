@@ -106,6 +106,11 @@ export function volgnummerUit(nummer: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
+// Vandaag in Nederlandse tijd (niet UTC: tussen 00:00 en 02:00 loopt UTC een dag achter).
+export function vandaagNl(): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Amsterdam" }).format(new Date());
+}
+
 export function plusDagen(datum: string, dagen: number): string {
   const [j, m, d] = datum.split("-").map(Number);
   const dt = new Date(Date.UTC(j, m - 1, d + dagen));

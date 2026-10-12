@@ -143,8 +143,7 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
     }
     if (!id) {
       setId(res.data.id);
-      // Voortaan werkt de pagina op dit concept; de URL volgt zonder de ingevulde gegevens kwijt te raken.
-      window.history.replaceState(null, "", `/facturen/${res.data.id}`);
+      // De URL laten we bewust staan: een URL-wijziging laadt de pagina opnieuw en wist dan o.a. het controleresultaat.
     }
     if (!stil) setMelding({ soort: "ok", tekst: "Concept opgeslagen." });
     return res.data.id;

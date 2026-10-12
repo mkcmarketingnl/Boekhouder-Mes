@@ -123,7 +123,7 @@ export function InstellingenForm({ start, terugNaar }: { start: InstellingenStar
       <Card className="p-5">
         <h2 className="display mb-4 text-[15px] font-semibold">Facturen</h2>
         <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
-          <Field label="Voorvoegsel factuurnummer" hint="Bijv. 2026- geeft 2026-0001. Mag leeg.">
+          <Field label="Voorvoegsel factuurnummer" hint="Bijv. 2026- geeft 2026-001. Mag leeg.">
             <Input value={f.factuurnummer_prefix} onChange={(e) => zet("factuurnummer_prefix", e.target.value)} />
           </Field>
           <Field label="Volgende factuurnummer" hint={`Eerstvolgende factuur: ${formatFactuurnummer(f.factuurnummer_prefix, f.volgend_factuurnummer)}`}>

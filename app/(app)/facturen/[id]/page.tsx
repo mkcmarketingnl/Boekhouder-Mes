@@ -7,7 +7,7 @@ import { FactuurDocument } from "@/components/facturen/FactuurDocument";
 import { FactuurActies } from "@/components/facturen/FactuurActies";
 import { MigratieNotice } from "@/components/facturen/MigratieNotice";
 import { laadFactuurContext } from "@/lib/facturenContext";
-import { bouwAfzender, formatFactuurnummer, type FactuurGegevens, type SalesInvoice } from "@/lib/facturen";
+import { bouwAfzender, formatFactuurnummer, vandaagNl, type FactuurGegevens, type SalesInvoice } from "@/lib/facturen";
 
 export default async function FactuurPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -44,7 +44,7 @@ export default async function FactuurPage({ params }: { params: Promise<{ id: st
           standaardNotitie={settings?.standaard_notitie ?? ""}
           nummerVoorbeeld={settings ? formatFactuurnummer(settings.factuurnummer_prefix, settings.volgend_factuurnummer) : "—"}
           vorigNummer={vorigNummer}
-          vandaag={new Date().toISOString().slice(0, 10)}
+          vandaag={vandaagNl()}
         />
       </div>
     );
