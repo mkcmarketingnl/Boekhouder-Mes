@@ -61,6 +61,7 @@ Antwoord ALTIJD met alleen geldige JSON, zonder markdown-codeblok, exact in dit 
   "bedrag_excl_btw": number | null,
   "btw_bedrag": number | null,
   "btw_percentage": number | null,
+  "btw_regels": [ { "percentage": number, "bedrag_incl_btw": number | null, "bedrag_excl_btw": number | null, "btw_bedrag": number | null } ] | null,
   "omschrijving": string | null,
   "voorgestelde_categorie": een van [${CATEGORIE_WAARDEN}] | null,
   "type": "kosten" | "omzet",
@@ -69,6 +70,12 @@ Antwoord ALTIJD met alleen geldige JSON, zonder markdown-codeblok, exact in dit 
   "risico": "laag" | "midden" | "hoog",
   "risico_toelichting": string | null
 }
+
+MEERDERE BTW-TARIEVEN OP ÉÉN DOCUMENT (belangrijk voor de BTW-aangifte van de gebruiker):
+- Staan er op het document 2 of meer VERSCHILLENDE BTW-tarieven (bijv. 9% over eten en 21% over drank; vaak als BTW-specificatie onderaan een kassabon of restaurantnota)? Zet dan "btw_percentage" op null en vul "btw_regels" met precies één regel per tarief (0% of "vrijgesteld" is ook een tarief).
+- Per regel neem je LETTERLIJK over wat er op het document staat: het percentage, en het bedrag incl. BTW, excl. BTW en/of het BTW-bedrag van dat tarief — wat er niet staat vul je met null (rekenen doen wij). Verzin of verdeel NOOIT zelf een bedrag over tarieven: alleen overnemen wat er op het document te lezen is. Is de verdeling niet leesbaar, zet dan "leesbaarheid" op "slecht".
+- "bedrag_incl_btw", "bedrag_excl_btw" en "btw_bedrag" bovenaan blijven de TOTALEN van het hele document.
+- Staat er maar één tarief (of geen BTW-specificatie)? Dan is "btw_regels" null en vul je "btw_percentage" gewoon in.
 
 Regels:
 - Als je een bedrag niet zeker kunt aflezen, vul dan null in voor dat veld — nooit gokken of een verzonnen waarde tonen.
@@ -106,14 +113,15 @@ Antwoord ALTIJD met alleen geldige JSON, zonder markdown-codeblok, exact in dit 
   "totaal_incl_btw": number | null,
   "totaal_excl_btw": number | null,
   "btw_bedrag": number | null,
-  "btw_percentage": number | null
+  "btw_percentage": number | null,
+  "btw_regels": [ { "percentage": number, "bedrag_incl_btw": number | null, "bedrag_excl_btw": number | null, "btw_bedrag": number | null } ] | null
 }
 
 Regels:
 - "afzender_naam": de partij die het document heeft opgesteld/uitgegeven (briefhoofd, winkelnaam bovenaan een bon). "geadresseerde_naam": de klant aan wie de factuur is gericht ("Aan:", "Factuuradres", "Debiteur"); bij een kassabon is dit meestal null.
 - Namen schrijf je letterlijk over, tekengetrouw (spelling, hoofdletters, punten, rechtsvorm). Niet verbeteren, niet verkorten, niets verzinnen.
 - "totaal_incl_btw" is het hoofdtotaal dat de klant verschuldigd is, inclusief BTW — bij een bon het bedrag bij "TOTAAL"/"TE BETALEN". Bij meerdere totalen (bijv. een inhouding of "netto te ontvangen" onderaan) kies je het oorspronkelijke factuurbedrag vóór die inhouding.
-- Bij meerdere BTW-tarieven op één document: "btw_percentage" is null en "btw_bedrag" is de som van alle BTW.
+- Bij meerdere VERSCHILLENDE BTW-tarieven op één document (bijv. 9% en 21%): "btw_percentage" is null, "btw_bedrag" is de som van alle BTW en "btw_regels" bevat één regel per tarief met letterlijk overgenomen bedragen (incl., excl. en/of BTW zoals ze op het document staan, anders null). Verdeel nooit zelf iets over tarieven. Is er maar één tarief, dan is "btw_regels" null.
 - Datum: let extra op het JAARTAL en op dag/maand-volgorde (Nederlands: dd-mm-jjjj).
 - Kun je iets niet met zekerheid lezen, vul dan null in. Gokken is erger dan null.`;
 

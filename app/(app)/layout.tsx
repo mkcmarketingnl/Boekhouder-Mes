@@ -6,6 +6,7 @@ import { getAccessStatus } from "@/lib/subscription";
 import { SignOutButton } from "@/components/SignOutButton";
 import { FooterDisclaimer } from "@/components/ui/Disclaimer";
 import { ChatWidget } from "@/components/chat/ChatWidget";
+import { AppNav } from "@/components/AppNav";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -42,17 +43,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               Boekhouder Mes
             </span>
           </Link>
-          <div className="flex shrink-0 items-center gap-3 sm:gap-4">
-            <Link href="/relaties" className="min-h-11 content-center text-xs text-muted underline">
-              Relaties
-            </Link>
-            <Link href="/account" className="min-h-11 content-center text-xs text-muted underline">
-              Account
-            </Link>
+          <div className="flex shrink-0 items-center">
             <SignOutButton />
           </div>
         </div>
       </header>
+      <AppNav />
       {/* min-w-0: main is a flex item in a flex-col page, so without this its cross-axis
           (width) can be forced wider than the viewport by any wide-intrinsic-width content
           inside — same class of bug as on Card, just one level higher up the tree. */}

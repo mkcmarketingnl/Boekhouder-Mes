@@ -87,6 +87,9 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
         !extracted.type_onzeker &&
         // Alleen automatisch opslaan als de dubbele scan + controles overal akkoord zijn.
         extracted.controle_status === "akkoord" &&
+        // Een bon met meerdere BTW-tarieven (bijv. eten 9% + drank 21%) laten we altijd even door de gebruiker
+        // bekijken: de verdeling bepaalt de BTW-aangifte, dus die moet zichtbaar kloppen.
+        !(extracted.btw_regels && extracted.btw_regels.length >= 2) &&
         !duplicaatVan;
 
       if (autoSaveOk && extracted) {

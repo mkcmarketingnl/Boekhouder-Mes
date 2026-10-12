@@ -1,3 +1,5 @@
+import type { BtwRegel } from "@/lib/btw";
+
 export type Rechtsvorm = "eenmanszaak" | "vof" | "bv" | "anders";
 export type Aangiftetijdvak = "maand" | "kwartaal" | "jaar";
 export type DocumentStatus = "verwerkt" | "geflaggd" | "handmatig";
@@ -54,6 +56,8 @@ export interface ExtractedInvoiceData {
   bedrag_excl_btw: number | null;
   btw_bedrag: number | null;
   btw_percentage: number | null;
+  // Alleen gevuld als er op het document 2 of meer verschillende BTW-tarieven staan (bijv. eten 9% + drank 21%).
+  btw_regels?: ExtractedBtwRegel[] | null;
   omschrijving: string | null;
   voorgestelde_categorie: Categorie | null;
   type: TransactieType | null;
@@ -65,6 +69,13 @@ export interface ExtractedInvoiceData {
   // worden opgeslagen; alles anders gaat altijd langs de gebruiker.
   controle_status?: ControleStatus;
   controle_afwijkingen?: string[];
+}
+
+export interface ExtractedBtwRegel {
+  percentage: number;
+  bedrag_incl_btw: number;
+  bedrag_excl_btw: number | null;
+  btw_bedrag: number | null;
 }
 
 export type ControleStatus = "akkoord" | "afwijking" | "niet_geverifieerd";
@@ -92,6 +103,8 @@ export interface Transaction {
   bedrag_excl_btw: number;
   btw_bedrag: number;
   btw_percentage: number;
+  // Alleen gevuld bij 2 of meer BTW-tarieven; de bedragen hierboven zijn dan de totalen (som van de regels).
+  btw_regels: BtwRegel[] | null;
   type: TransactieType;
   categorie: string;
   risico: RisicoNiveau;

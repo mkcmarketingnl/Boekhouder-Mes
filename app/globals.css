@@ -203,3 +203,24 @@ select:focus {
     animation: none !important;
   }
 }
+
+/* Facturen afdrukken / opslaan als PDF: alleen het factuurdocument zelf (#factuur-print) blijft zichtbaar. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #factuur-print,
+  #factuur-print * {
+    visibility: visible;
+  }
+  #factuur-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: 0 !important;
+  }
+  @page {
+    margin: 12mm;
+  }
+}

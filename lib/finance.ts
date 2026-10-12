@@ -16,6 +16,7 @@ import {
 } from "date-fns";
 import { nl } from "date-fns/locale";
 import { normalizeSupplierName } from "@/lib/types";
+import { isVoorbelastingAftrekbaar, naarCenten } from "@/lib/btw";
 import type { Aangiftetijdvak, Transaction } from "@/lib/types";
 
 export type PeriodType = "maand" | "kwartaal" | "jaar";
@@ -65,6 +66,8 @@ export interface FinancialSnapshot {
   kosten: number;
   winst: number;
   btwSaldo: number;
+  // BTW op kosten die je NIET kunt terugvragen (bijv. eten/drinken in de horeca); telt niet mee in btwSaldo.
+  nietAftrekbareBtw: number;
   kostenPerCategorie: Record<string, number>;
 }
 
@@ -75,6 +78,7 @@ export function aggregateTransactions(transactions: Transaction[]): FinancialSna
   let kosten = 0;
   let btwOntvangen = 0;
   let btwBetaald = 0;
+  let nietAftrekbaar = 0;
   const kostenPerCategorieCenten: Record<string, number> = {};
 
   for (const t of transactions) {
@@ -82,7 +86,8 @@ export function aggregateTransactions(transactions: Transaction[]): FinancialSna
     const btw = Math.round(t.btw_bedrag * 100);
     if (t.type === "kosten") {
       kosten += excl;
-      btwBetaald += btw;
+      if (isVoorbelastingAftrekbaar(t)) btwBetaald += btw;
+      else nietAftrekbaar += btw;
       kostenPerCategorieCenten[t.categorie] = (kostenPerCategorieCenten[t.categorie] ?? 0) + excl;
     } else {
       omzet += excl;
@@ -100,6 +105,7 @@ export function aggregateTransactions(transactions: Transaction[]): FinancialSna
     kosten: kosten / 100,
     winst: (omzet - kosten) / 100,
     btwSaldo: (btwOntvangen - btwBetaald) / 100,
+    nietAftrekbareBtw: nietAftrekbaar / 100,
     kostenPerCategorie,
   };
 }
@@ -121,11 +127,11 @@ export function groupMonthlyTrend(transactions: Transaction[], monthsCount = 6):
 
     for (const t of transactions) {
       if (t.factuurdatum.slice(0, 7) !== monthKey) continue;
-      if (t.type === "kosten") kosten += t.bedrag_excl_btw;
-      else omzet += t.bedrag_excl_btw;
+      if (t.type === "kosten") kosten += naarCenten(t.bedrag_excl_btw);
+      else omzet += naarCenten(t.bedrag_excl_btw);
     }
 
-    return { label: format(month, "MMM", { locale: nl }), omzet, kosten };
+    return { label: format(month, "MMM", { locale: nl }), omzet: omzet / 100, kosten: kosten / 100 };
   });
 }
 
@@ -140,8 +146,6 @@ export interface RelatieSamenvatting {
   aantal: number;
   laatsteDatum: string;
 }
-
-const naarCenten = (bedrag: number) => Math.round(bedrag * 100);
 
 export function groupByLeverancier(transactions: Transaction[], type: "kosten" | "omzet"): RelatieSamenvatting[] {
   // Groeperen op genormaliseerde naam (zelfde helper als het leveranciers-geheugen), anders

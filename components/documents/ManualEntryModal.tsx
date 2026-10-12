@@ -5,7 +5,8 @@ import { X, Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input, Select, Textarea } from "@/components/ui/Input";
-import { AmountFields } from "@/components/documents/AmountFields";
+import { BedragBtwFields } from "@/components/documents/BedragBtwFields";
+import { bedragenUitWaarde, legeWaarde } from "@/lib/btwInvoer";
 import { CATEGORIE_OPTIES } from "@/lib/types";
 import { saveTransaction, checkDuplicateFactuur } from "@/lib/transactions";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -22,8 +23,7 @@ export function ManualEntryModal({
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
-  const [bedragInclBtw, setBedragInclBtw] = useState("");
-  const [btwPercentage, setBtwPercentage] = useState(defaultBtwPercentage);
+  const [bedragBtw, setBedragBtw] = useState(() => legeWaarde(defaultBtwPercentage));
   const [leverancier, setLeverancier] = useState("");
   const [factuurdatum, setFactuurdatum] = useState(new Date().toISOString().slice(0, 10));
   const [factuurnummer, setFactuurnummer] = useState("");
@@ -36,8 +36,9 @@ export function ManualEntryModal({
   const [duplicaatBevestigd, setDuplicaatBevestigd] = useState(false);
 
   async function handleSave() {
-    if (!bedragInclBtw || Number(bedragInclBtw) <= 0) {
-      setError("Vul een geldig totaalbedrag in.");
+    const bedragen = bedragenUitWaarde(bedragBtw);
+    if (!bedragen.geldig) {
+      setError(bedragen.fout ?? "Vul een geldig totaalbedrag in.");
       return;
     }
 
@@ -59,8 +60,9 @@ export function ManualEntryModal({
       factuurdatum,
       leverancier: leverancier || (type === "omzet" ? "Klant" : "Onbekende leverancier"),
       omschrijving: omschrijving || null,
-      bedrag_incl_btw: Number(bedragInclBtw),
-      btw_percentage: btwPercentage,
+      bedrag_incl_btw: bedragen.totaalIncl,
+      btw_percentage: bedragen.btwPercentage,
+      btw_regels: bedragen.btwRegels,
       type,
       categorie,
       risico: "laag",
@@ -73,7 +75,7 @@ export function ManualEntryModal({
       setError(saveError);
       return;
     }
-    onSaved(`Handmatig toegevoegd — ${type === "omzet" ? "+" : "−"}${formatCurrency(Number(bedragInclBtw))}`);
+    onSaved(`Handmatig toegevoegd — ${type === "omzet" ? "+" : "−"}${formatCurrency(bedragen.totaalIncl)}`);
   }
 
   return (
@@ -104,12 +106,7 @@ export function ManualEntryModal({
           ))}
         </div>
 
-        <AmountFields
-          bedragInclBtw={bedragInclBtw}
-          btwPercentage={btwPercentage}
-          onBedragChange={setBedragInclBtw}
-          onPercentageChange={setBtwPercentage}
-        />
+        <BedragBtwFields waarde={bedragBtw} onChange={setBedragBtw} />
 
         <Field label={`${type === "omzet" ? "Klant" : "Leverancier"} (optioneel)`}>
           <Input

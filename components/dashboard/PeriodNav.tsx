@@ -6,9 +6,11 @@ import { getPeriodBounds, shiftPeriod, type PeriodType } from "@/lib/finance";
 export function PeriodNav({
   periodType,
   reference,
+  basePath = "/dashboard",
 }: {
   periodType: PeriodType;
   reference: Date;
+  basePath?: string;
 }) {
   const prevRef = shiftPeriod(reference, periodType, -1);
   const nextRef = shiftPeriod(reference, periodType, 1);
@@ -18,7 +20,7 @@ export function PeriodNav({
   return (
     <div className="flex items-center gap-1">
       <Link
-        href={`/dashboard?periode=${periodType}&ref=${formatDateInput(prevRef)}`}
+        href={`${basePath}?periode=${periodType}&ref=${formatDateInput(prevRef)}`}
         aria-label="Vorige periode"
         className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted hover:text-ink"
       >
@@ -30,7 +32,7 @@ export function PeriodNav({
         </span>
       ) : (
         <Link
-          href={`/dashboard?periode=${periodType}&ref=${formatDateInput(nextRef)}`}
+          href={`${basePath}?periode=${periodType}&ref=${formatDateInput(nextRef)}`}
           aria-label="Volgende periode"
           className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted hover:text-ink"
         >

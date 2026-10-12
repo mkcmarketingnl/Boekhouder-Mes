@@ -5,7 +5,8 @@ import { X, Check, AlertTriangle, Copy } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input, Select, Textarea } from "@/components/ui/Input";
-import { AmountFields } from "@/components/documents/AmountFields";
+import { BedragBtwFields } from "@/components/documents/BedragBtwFields";
+import { bedragenUitWaarde, waardeUitScan } from "@/lib/btwInvoer";
 import { RISK_WARNING_PREFIX, RISK_WARNING_SUFFIX } from "@/components/ui/Disclaimer";
 import { CATEGORIE_OPTIES } from "@/lib/types";
 import { saveTransaction } from "@/lib/transactions";
@@ -45,10 +46,7 @@ export function ReviewModal({
   const [omschrijving, setOmschrijving] = useState(extracted?.omschrijving ?? "");
   const [categorie, setCategorie] = useState<string>(extracted?.voorgestelde_categorie ?? CATEGORIE_OPTIES[0]);
   const [type, setType] = useState<TransactieType>(extracted?.type ?? "kosten");
-  const [bedragInclBtw, setBedragInclBtw] = useState(extracted?.bedrag_incl_btw?.toString() ?? "");
-  const [btwPercentage, setBtwPercentage] = useState(
-    extracted?.btw_percentage ?? defaultBtwPercentage
-  );
+  const [bedragBtw, setBedragBtw] = useState(() => waardeUitScan(extracted, defaultBtwPercentage));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,8 +54,9 @@ export function ReviewModal({
     extracted && (extracted.risico === "midden" || extracted.risico === "hoog") ? extracted.risico : null;
 
   async function handleSave() {
-    if (!leverancier.trim() || !factuurdatum || !bedragInclBtw) {
-      setError("Vul minimaal leverancier, datum en bedrag in.");
+    const bedragen = bedragenUitWaarde(bedragBtw);
+    if (!leverancier.trim() || !factuurdatum || !bedragen.geldig) {
+      setError(bedragen.fout ?? "Vul minimaal leverancier, datum en bedrag in.");
       return;
     }
     setSaving(true);
@@ -69,8 +68,9 @@ export function ReviewModal({
       factuurdatum,
       leverancier,
       omschrijving: omschrijving || null,
-      bedrag_incl_btw: Number(bedragInclBtw),
-      btw_percentage: btwPercentage,
+      bedrag_incl_btw: bedragen.totaalIncl,
+      btw_percentage: bedragen.btwPercentage,
+      btw_regels: bedragen.btwRegels,
       type,
       categorie,
       risico: extracted?.risico ?? "laag",
@@ -83,7 +83,7 @@ export function ReviewModal({
       setError(saveError);
       return;
     }
-    onSaved(`${leverancier} opgeslagen — ${type === "omzet" ? "+" : "−"}${formatCurrency(Number(bedragInclBtw))}`);
+    onSaved(`${leverancier} opgeslagen — ${type === "omzet" ? "+" : "−"}${formatCurrency(bedragen.totaalIncl)}`);
   }
 
   return (
@@ -207,12 +207,7 @@ export function ReviewModal({
           </Field>
         </div>
 
-        <AmountFields
-          bedragInclBtw={bedragInclBtw}
-          btwPercentage={btwPercentage}
-          onBedragChange={setBedragInclBtw}
-          onPercentageChange={setBtwPercentage}
-        />
+        <BedragBtwFields waarde={bedragBtw} onChange={setBedragBtw} documentTotaal={extracted?.bedrag_incl_btw ?? null} />
 
         {type === "kosten" && (
           <Field label="Categorie">

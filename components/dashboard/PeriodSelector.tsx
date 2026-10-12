@@ -8,13 +8,13 @@ const OPTIONS: { value: PeriodType; label: string }[] = [
   { value: "jaar", label: "Jaar" },
 ];
 
-export function PeriodSelector({ active }: { active: PeriodType }) {
+export function PeriodSelector({ active, basePath = "/dashboard" }: { active: PeriodType; basePath?: string }) {
   return (
     <div className="inline-flex rounded-full border border-line bg-white p-1">
       {OPTIONS.map((opt) => (
         <Link
           key={opt.value}
-          href={`/dashboard?periode=${opt.value}`}
+          href={`${basePath}?periode=${opt.value}`}
           className={cn(
             "min-h-9 rounded-full px-3.5 py-1.5 text-sm font-semibold leading-6",
             active === opt.value ? "bg-ink text-paper" : "text-muted"

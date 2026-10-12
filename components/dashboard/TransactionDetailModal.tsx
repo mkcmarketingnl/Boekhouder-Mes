@@ -8,7 +8,9 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input, Select, Textarea } from "@/components/ui/Input";
-import { AmountFields } from "@/components/documents/AmountFields";
+import { BedragBtwFields } from "@/components/documents/BedragBtwFields";
+import { bedragenUitWaarde, waardeUitTransactie } from "@/lib/btwInvoer";
+import { isGemengd } from "@/lib/btw";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { CATEGORIE_OPTIES } from "@/lib/types";
 import { checkDuplicateFactuur, updateTransaction } from "@/lib/transactions";
@@ -39,8 +41,7 @@ export function TransactionDetailModal({ transaction, onClose }: { transaction: 
   const [omschrijving, setOmschrijving] = useState(transaction.omschrijving ?? "");
   const [categorie, setCategorie] = useState(transaction.categorie);
   const [type, setType] = useState<TransactieType>(transaction.type);
-  const [bedragInclBtw, setBedragInclBtw] = useState(transaction.bedrag_incl_btw.toString());
-  const [btwPercentage, setBtwPercentage] = useState(transaction.btw_percentage);
+  const [bedragBtw, setBedragBtw] = useState(() => waardeUitTransactie(transaction));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [duplicaatVan, setDuplicaatVan] = useState<Transaction | null>(null);
@@ -60,6 +61,12 @@ export function TransactionDetailModal({ transaction, onClose }: { transaction: 
 
   async function handleSave() {
     setError(null);
+
+    const bedragen = bedragenUitWaarde(bedragBtw);
+    if (!bedragen.geldig) {
+      setError(bedragen.fout ?? "Vul een geldig bedrag in.");
+      return;
+    }
 
     if (!duplicaatBevestigd) {
       const bestaande = await checkDuplicateFactuur(
@@ -81,8 +88,10 @@ export function TransactionDetailModal({ transaction, onClose }: { transaction: 
       factuurnummer: factuurnummer || null,
       factuurdatum,
       omschrijving: omschrijving || null,
-      bedrag_incl_btw: Number(bedragInclBtw),
-      btw_percentage: btwPercentage,
+      bedrag_incl_btw: bedragen.totaalIncl,
+      btw_percentage: bedragen.btwPercentage,
+      btw_regels: bedragen.btwRegels,
+      hadBtwRegels: isGemengd(transaction.btw_regels),
       type,
       categorie,
     });
@@ -149,12 +158,7 @@ export function TransactionDetailModal({ transaction, onClose }: { transaction: 
             </Field>
           </div>
 
-          <AmountFields
-            bedragInclBtw={bedragInclBtw}
-            btwPercentage={btwPercentage}
-            onBedragChange={setBedragInclBtw}
-            onPercentageChange={setBtwPercentage}
-          />
+          <BedragBtwFields waarde={bedragBtw} onChange={setBedragBtw} />
 
           {type === "kosten" && (
             <Field label="Categorie">
@@ -244,7 +248,17 @@ export function TransactionDetailModal({ transaction, onClose }: { transaction: 
           <Row label="Categorie" value={transaction.categorie} />
           <Row label="Bedrag excl. BTW" value={formatCurrency(transaction.bedrag_excl_btw)} />
           <Row label="BTW-bedrag" value={formatCurrency(transaction.btw_bedrag)} />
-          <Row label="BTW-percentage" value={`${transaction.btw_percentage}%`} />
+          {isGemengd(transaction.btw_regels) ? (
+            transaction.btw_regels.map((r) => (
+              <Row
+                key={r.percentage}
+                label={`BTW ${r.percentage}%`}
+                value={`${formatCurrency(r.btw_bedrag)} over ${formatCurrency(r.bedrag_excl_btw)}`}
+              />
+            ))
+          ) : (
+            <Row label="BTW-percentage" value={`${transaction.btw_percentage}%`} />
+          )}
           <Row label="Invoerwijze" value={transaction.invoerwijze === "ai" ? "AI-scan" : "Handmatig"} />
         </div>
 

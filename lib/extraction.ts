@@ -7,7 +7,8 @@ import {
   parseClaudeJson,
 } from "@/lib/anthropic/prompts";
 import { formatCurrency } from "@/lib/format";
-import type { ExtractedInvoiceData, TransactieType } from "@/lib/types";
+import { controleerDocumentRegels, naarCenten, naarEuro, normaliseerRegels, type BtwRegel } from "@/lib/btw";
+import type { ExtractedBtwRegel, ExtractedInvoiceData, TransactieType } from "@/lib/types";
 
 // Elke fout in een gescande factuur belandt in de boekhouding van de gebruiker. Daarom wordt elk
 // document hier meerdere keren en onafhankelijk gelezen en wordt het resultaat in code gecontroleerd:
@@ -28,6 +29,14 @@ interface Transcriptie {
   totaal_excl_btw: number | null;
   btw_bedrag: number | null;
   btw_percentage: number | null;
+  btw_regels?: RuweRegel[] | null;
+}
+
+interface RuweRegel {
+  percentage: number;
+  bedrag_incl_btw: number | null;
+  bedrag_excl_btw: number | null;
+  btw_bedrag: number | null;
 }
 
 type Bron = "scan 1" | "scan 2" | "controlescan";
@@ -99,6 +108,63 @@ function typeUitTranscriptie(t: Transcriptie, eigen: string): TransactieType | n
   return null; // geen oordeel (bijv. kassabon of bedrijfsnaam niet herkenbaar)
 }
 
+// ---------- BTW-regels (meerdere tarieven op één document) ----------
+
+// Zet de letterlijk gelezen regels om naar volledige regels (incl/excl/btw). Ontbreekt bij een regel te veel
+// om het bedrag te bepalen, dan is het document "onleesbaar" op dit punt — dat tellen we als afwijking.
+function leesRegels(ruw: RuweRegel[] | null | undefined): { regels: BtwRegel[] | null; onleesbaar: boolean } {
+  if (!ruw || ruw.length < 2) return { regels: null, onleesbaar: false };
+  const volledig: { percentage: number; bedrag_incl_btw: number }[] = [];
+  for (const r of ruw) {
+    if (typeof r.percentage !== "number") return { regels: null, onleesbaar: true };
+    let incl = r.bedrag_incl_btw;
+    if (incl == null && r.bedrag_excl_btw != null && r.btw_bedrag != null) {
+      incl = naarEuro(naarCenten(r.bedrag_excl_btw) + naarCenten(r.btw_bedrag));
+    }
+    if (incl == null && r.bedrag_excl_btw != null) {
+      incl = naarEuro(Math.round(naarCenten(r.bedrag_excl_btw) * (1 + r.percentage / 100)));
+    }
+    if (incl == null || incl <= 0) return { regels: null, onleesbaar: true };
+    volledig.push({ percentage: r.percentage, bedrag_incl_btw: incl });
+  }
+  const regels = normaliseerRegels(volledig);
+  return regels.length >= 2 ? { regels, onleesbaar: false } : { regels: null, onleesbaar: false };
+}
+
+// Eén vergelijkbare "vingerafdruk" per lezing: "enkel", "onleesbaar" of bijv. "21:4000|9:6000" (centen).
+function regelSignatuur(ruw: RuweRegel[] | null | undefined): string {
+  const { regels, onleesbaar } = leesRegels(ruw);
+  if (onleesbaar) return "onleesbaar";
+  if (!regels) return "enkel";
+  return regels.map((r) => r.percentage + ":" + naarCenten(r.bedrag_incl_btw)).join("|");
+}
+
+// Twee signaturen zijn gelijk als ze op hooguit 1 cent per regel na hetzelfde zeggen.
+function zelfdeRegelSignatuur(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (a === "enkel" || b === "enkel" || a === "onleesbaar" || b === "onleesbaar") return false;
+  const x = a.split("|");
+  const y = b.split("|");
+  if (x.length !== y.length) return false;
+  return x.every((deel, i) => {
+    const [pa, ca] = deel.split(":");
+    const [pb, cb] = y[i].split(":");
+    return pa === pb && Math.abs(Number(ca) - Number(cb)) <= 1;
+  });
+}
+
+function toonSignatuur(v: string): string {
+  if (v === "enkel") return "één tarief";
+  if (v === "onleesbaar") return "niet goed te lezen";
+  return v
+    .split("|")
+    .map((d) => {
+      const [p, c] = d.split(":");
+      return p + "%: " + formatCurrency(Number(c) / 100);
+    })
+    .join(" + ");
+}
+
 // ---------- stemmen per veld ----------
 
 interface Stem<T> {
@@ -168,6 +234,7 @@ export function nietGeverifieerd(reden: string): ExtractedInvoiceData {
     bedrag_excl_btw: null,
     btw_bedrag: null,
     btw_percentage: null,
+    btw_regels: null,
     omschrijving: null,
     voorgestelde_categorie: null,
     type: null,
@@ -189,6 +256,7 @@ interface Analyse {
   datum: Stem<string>;
   nummer: Stem<string>;
   btwPercentage: Stem<number>;
+  regels: Stem<string>;
 }
 
 export function analyseer(a: ExtractedInvoiceData, tr: { bron: Bron; t: Transcriptie | null }[], eigen: string): Analyse {
@@ -230,11 +298,21 @@ export function analyseer(a: ExtractedInvoiceData, tr: { bron: Bron; t: Transcri
       zelfdePercentage,
       true
     ),
+    // Meerdere tarieven: elke scan moet dezelfde verdeling zien. Ziet de ene scan er twee en de andere één,
+    // dan is dat een tegenspraak (die gaat naar de gebruiker) — nooit stilzwijgend één van beide kiezen.
+    regels: stem<string>(
+      [
+        { bron: "scan 1", waarde: regelSignatuur(a.btw_regels) },
+        ...tr.map(({ bron, t }) => ({ bron, waarde: t ? regelSignatuur(t.btw_regels) : null })),
+      ],
+      zelfdeRegelSignatuur,
+      true
+    ),
   };
 }
 
 export const heeftVerschil = (x: Analyse) =>
-  !x.type.unaniem || !x.naam.unaniem || !x.bedrag.unaniem || !x.datum.unaniem || !x.nummer.unaniem || !x.btwPercentage.unaniem;
+  !x.type.unaniem || !x.naam.unaniem || !x.bedrag.unaniem || !x.datum.unaniem || !x.nummer.unaniem || !x.btwPercentage.unaniem || !x.regels.unaniem;
 
 // ---------- hoofdfunctie ----------
 
@@ -287,14 +365,36 @@ export async function scanDocument(params: {
   verschil("Factuurnummer", analyse.nummer, (v) => v);
   verschil("BTW-percentage", analyse.btwPercentage, (v) => `${v}%`);
   verschil("Soort (kosten/omzet)", analyse.type, (v) => v);
+  verschil("BTW-tarieven", analyse.regels, toonSignatuur);
+
+  // BTW-regels: de gekozen verdeling komt van de lezing die dat zag (eerst scan 1, dan de controles).
+  const gekozenSignatuur = analyse.regels.gekozen ?? "enkel";
+  const ruweBronnen: (RuweRegel[] | null | undefined)[] = [a.btw_regels, ...transcripties.map((x) => x.t?.btw_regels)];
+  let gekozenRegels: BtwRegel[] | null = null;
+  let regelsOnleesbaar = gekozenSignatuur === "onleesbaar";
+  let ruweBron: RuweRegel[] | null | undefined = null;
+  if (gekozenSignatuur !== "enkel" && gekozenSignatuur !== "onleesbaar") {
+    ruweBron = ruweBronnen.find((r) => zelfdeRegelSignatuur(regelSignatuur(r), gekozenSignatuur));
+    gekozenRegels = leesRegels(ruweBron).regels;
+    regelsOnleesbaar = gekozenRegels === null;
+  }
+  const regelsVoorUi: ExtractedBtwRegel[] | null = gekozenRegels
+    ? gekozenRegels.map((r) => ({
+        percentage: r.percentage,
+        bedrag_incl_btw: r.bedrag_incl_btw,
+        bedrag_excl_btw: r.bedrag_excl_btw,
+        btw_bedrag: r.btw_bedrag,
+      }))
+    : null;
 
   const final: ExtractedInvoiceData = {
     ...a,
+    btw_regels: regelsVoorUi,
     leverancier: analyse.naam.gekozen ?? a.leverancier,
     factuurnummer: analyse.nummer.gekozen ?? a.factuurnummer,
     factuurdatum: analyse.datum.gekozen ?? a.factuurdatum,
     bedrag_incl_btw: analyse.bedrag.gekozen ?? a.bedrag_incl_btw,
-    btw_percentage: analyse.btwPercentage.gekozen ?? a.btw_percentage,
+    btw_percentage: regelsVoorUi ? null : analyse.btwPercentage.gekozen ?? a.btw_percentage,
     type: analyse.type.gekozen ?? a.type,
     type_onzeker: a.type_onzeker || !analyse.type.unaniem,
   };
@@ -327,8 +427,25 @@ export async function scanDocument(params: {
     afwijkingen.push("De bedragen op de scan tellen niet op (excl. BTW + BTW ≠ totaal) — controleer het totaalbedrag.");
   }
 
+  if (regelsOnleesbaar) {
+    afwijkingen.push(
+      "Er staan meerdere BTW-tarieven op dit document, maar de verdeling is niet duidelijk te lezen — vul per tarief het bedrag zelf in."
+    );
+  }
+  if (gekozenRegels && ruweBron) {
+    // meerdere tarieven: tellen de regels op tot het totaal, en klopt de BTW per regel met het percentage?
+    const volledig = leesRegels(ruweBron).regels ?? [];
+    const metOpgegevenBtw = ruweBron.map((r) => ({
+      percentage: r.percentage,
+      bedrag_incl_btw: volledig.find((x) => x.percentage === r.percentage)?.bedrag_incl_btw ?? 0,
+      bedrag_excl_btw: r.bedrag_excl_btw,
+      btw_bedrag: r.btw_bedrag,
+    }));
+    afwijkingen.push(...controleerDocumentRegels(metOpgegevenBtw, final.bedrag_incl_btw));
+  }
+
   // BTW-percentage moet passen bij de bedragen; zo niet, dan staan er waarschijnlijk meerdere tarieven op (of is iets misgelezen)
-  if (a.bedrag_excl_btw && a.btw_bedrag != null && final.btw_percentage != null && a.bedrag_excl_btw > 0) {
+  if (!gekozenRegels && a.bedrag_excl_btw && a.btw_bedrag != null && final.btw_percentage != null && a.bedrag_excl_btw > 0) {
     const afgeleid = (a.btw_bedrag / a.bedrag_excl_btw) * 100;
     if (Math.abs(afgeleid - final.btw_percentage) > 1.5) {
       afwijkingen.push(`Het BTW-percentage (${final.btw_percentage}%) past niet bij de bedragen op het document (±${afgeleid.toFixed(0)}%). Staan er meerdere BTW-tarieven op? Controleer het percentage — het bepaalt je BTW-saldo.`);

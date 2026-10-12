@@ -14,13 +14,15 @@ export function formatDate(date: string | Date): string {
   }).format(d);
 }
 
+// Datum als YYYY-MM-DD volgens de LOKALE kalenderdatum. toISOString() rekent naar UTC om, waardoor een
+// periodegrens (bijv. 1 juli 00:00 lokale tijd) op een server in een andere tijdzone een dag opschuift en
+// facturen op de eerste/laatste dag van een kwartaal in de verkeerde periode (en aangifte) belanden.
 export function formatDateInput(date: string | Date): string {
+  if (typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toISOString().slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-export function berekenExclBtw(totaalInclBtw: number, btwPercentage: number) {
-  const bedragExclBtw = totaalInclBtw / (1 + btwPercentage / 100);
-  const btwBedrag = totaalInclBtw - bedragExclBtw;
-  return { bedragExclBtw, btwBedrag };
-}
+// Rekenregel staat op één plek (lib/btw.ts); hier alleen doorgegeven voor bestaande imports.
+export { berekenExclBtw } from "@/lib/btw";
