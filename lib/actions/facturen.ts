@@ -11,6 +11,7 @@ import {
   isTabelOntbreekt,
   MIGRATIE_MELDING,
   naarBtwRegels,
+  prijsExclWeergave,
   vandaagNl,
   volgnummerUit,
   type Bevinding,
@@ -127,12 +128,20 @@ export interface FactuurInvoer {
 }
 
 function opschonenRegels(regels: FactuurRegel[]): FactuurRegel[] {
-  return regels.map((r) => ({
-    omschrijving: (r.omschrijving ?? "").trim(),
-    aantal: Number(r.aantal) || 0,
-    prijs_excl: Number(r.prijs_excl) || 0,
-    btw_percentage: [21, 9, 0].includes(Number(r.btw_percentage)) ? Number(r.btw_percentage) : 21,
-  }));
+  return regels.map((r) => {
+    const schoon: FactuurRegel = {
+      omschrijving: (r.omschrijving ?? "").trim(),
+      aantal: Number(r.aantal) || 0,
+      prijs_excl: Number(r.prijs_excl) || 0,
+      btw_percentage: [21, 9, 0].includes(Number(r.btw_percentage)) ? Number(r.btw_percentage) : 21,
+    };
+    // Incl.-prijs blijft leidend; prijs_excl is dan de afgeleide weergave (de KOR/verlegd-regel wordt pas bij het berekenen toegepast).
+    if (r.prijs_incl != null && Number.isFinite(Number(r.prijs_incl))) {
+      schoon.prijs_incl = Number(r.prijs_incl);
+      schoon.prijs_excl = prijsExclWeergave(schoon);
+    }
+    return schoon;
+  });
 }
 
 export async function bewaarFactuur(invoer: FactuurInvoer): Promise<ActieResultaat<{ id: string }>> {

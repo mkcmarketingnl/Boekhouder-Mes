@@ -1,6 +1,6 @@
 import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { berekenTotalen, btwVermelding, regelTotaalExcl, type Afzender, type FactuurGegevens, type FactuurTemplate } from "@/lib/facturen";
+import { berekenTotalen, btwVermelding, prijsExclWeergave, regelTotaalExcl, type Afzender, type FactuurGegevens, type FactuurTemplate } from "@/lib/facturen";
 
 // Het factuurdocument zoals de klant het ziet. Eén component voor het voorbeeld in de editor, de detailpagina en
 // het afdrukken/PDF. De drie templates verschillen alleen in opmaak; de gebruiker past alleen de gegevens aan.
@@ -17,6 +17,7 @@ export function FactuurDocument({
 }) {
   const totalen = berekenTotalen(gegevens.regels, { btw_verlegd: gegevens.btw_verlegd, kor: gegevens.kor });
   const vermelding = btwVermelding(gegevens);
+  const nulBtw = gegevens.btw_verlegd || gegevens.kor;
   const modern = template === "modern";
   const minimaal = template === "minimaal";
 
@@ -100,9 +101,9 @@ export function FactuurDocument({
                 <tr key={i} className={cn(!minimaal && "border-b border-line/70", modern && i % 2 === 1 && "bg-paper-dark/60")}>
                   <td className="py-2 pr-3 align-top">{r.omschrijving || "—"}</td>
                   <td className="mono py-2 pr-3 text-right align-top">{r.aantal}</td>
-                  <td className="mono py-2 pr-3 text-right align-top">{formatCurrency(Number(r.prijs_excl) || 0)}</td>
+                  <td className="mono py-2 pr-3 text-right align-top">{formatCurrency(prijsExclWeergave(r, nulBtw))}</td>
                   <td className="mono py-2 pr-3 text-right align-top">{gegevens.btw_verlegd || gegevens.kor ? "0%" : `${r.btw_percentage}%`}</td>
-                  <td className="mono py-2 text-right align-top">{formatCurrency(regelTotaalExcl(r))}</td>
+                  <td className="mono py-2 text-right align-top">{formatCurrency(regelTotaalExcl(r, nulBtw))}</td>
                 </tr>
               ))}
             </tbody>

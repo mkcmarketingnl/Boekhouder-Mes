@@ -16,6 +16,9 @@ import {
   berekenTotalen,
   controleerFactuur,
   plusDagen,
+  isInclRegel,
+  prijsExclWeergave,
+  regelCenten,
   regelTotaalExcl,
   type Afzender,
   type Bevinding,
@@ -44,6 +47,7 @@ interface ControleResultaat {
 }
 
 const LEGE_REGEL: FactuurRegel = { omschrijving: "", aantal: 1, prijs_excl: 0, btw_percentage: 21 };
+const r2 = (n: number) => Math.round(n * 100) / 100;
 
 export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, standaardTemplate, standaardNotitie, nummerVoorbeeld, vorigNummer, vandaag }: Props) {
   const router = useRouter();
@@ -64,6 +68,8 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
   const [leverdatum, setLeverdatum] = useState(bestaande?.leverdatum ?? "");
 
   const [regels, setRegels] = useState<FactuurRegel[]>(bestaande?.regels?.length ? bestaande.regels : [{ ...LEGE_REGEL }]);
+  // Prijzen invoeren incl. of excl. BTW; een bestaand concept onthoudt wat je koos.
+  const [inclModus, setInclModus] = useState(!!bestaande?.regels?.some(isInclRegel));
   const [redenen, setRedenen] = useState<Record<number, string>>({});
   const [verlegd, setVerlegd] = useState(bestaande?.btw_verlegd ?? false);
   const [notitie, setNotitie] = useState(bestaande?.notitie ?? standaardNotitie);
@@ -76,6 +82,7 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
   const [controleHandtekening, setControleHandtekening] = useState<string>("");
   const [wachtOpAkkoord, setWachtOpAkkoord] = useState(false);
 
+  const nulBtw = verlegd || kor;
   const gegevens: FactuurGegevens = useMemo(
     () => ({
       factuurnummer: nummerVoorbeeld,
@@ -89,12 +96,12 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
       factuurdatum,
       vervaldatum,
       leverdatum: leverdatum || null,
-      regels,
+      regels: regels.map((r) => (isInclRegel(r) ? { ...r, prijs_excl: prijsExclWeergave(r, nulBtw) } : r)),
       btw_verlegd: verlegd,
       kor,
       notitie: notitie || null,
     }),
-    [nummerVoorbeeld, klantNaam, klantAdres, klantPostcode, klantPlaats, klantLand, klantBtw, klantKvk, factuurdatum, vervaldatum, leverdatum, regels, verlegd, kor, notitie]
+    [nummerVoorbeeld, klantNaam, klantAdres, klantPostcode, klantPlaats, klantLand, klantBtw, klantKvk, factuurdatum, vervaldatum, leverdatum, regels, verlegd, kor, notitie, nulBtw]
   );
 
   const handtekening = JSON.stringify([gegevens, klantEmail, template]);
@@ -105,8 +112,6 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
   const getoond: Bevinding[] = controle && !verouderd ? controle.bevindingen : liveBevindingen;
   const fouten = getoond.filter((b) => b.ernst === "fout");
   const letOps = getoond.filter((b) => b.ernst === "let_op");
-  const nulBtw = verlegd || kor;
-
   function invoer() {
     return {
       id: id ?? undefined,
@@ -130,6 +135,21 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
 
   function zetRegel(i: number, patch: Partial<FactuurRegel>) {
     setRegels((r) => r.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  }
+
+  // Wisselen tussen excl. en incl. BTW behoudt de bedragen: het getoonde bedrag wordt omgerekend, niet gewist.
+  function wisselModus(incl: boolean) {
+    if (incl === inclModus) return;
+    setInclModus(incl);
+    setRegels((huidig) =>
+      huidig.map((r) => {
+        const pct = nulBtw ? 0 : Number(r.btw_percentage);
+        if (incl) return { ...r, prijs_incl: r2(Number(r.prijs_excl || 0) * (1 + pct / 100)) };
+        const { prijs_incl: _weg, ...rest } = r;
+        void _weg;
+        return { ...rest, prijs_excl: isInclRegel(r) ? r2(Number(r.prijs_incl) / (1 + pct / 100)) : r.prijs_excl };
+      })
+    );
   }
 
   async function opslaan(stil = false): Promise<string | null> {
@@ -334,6 +354,20 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
           </Button>
         </div>
 
+        <div className="mb-4" role="group" aria-label="Prijzen invoeren">
+          <div className="mb-1.5 text-[12px] font-medium">Ik voer prijzen in</div>
+          <div className="grid grid-cols-2 gap-2">
+            {([[false, "Exclusief BTW"], [true, "Inclusief BTW"]] as const).map(([incl, label]) => (
+              <button key={label} type="button" onClick={() => wisselModus(incl)} aria-pressed={inclModus === incl} className={`min-h-11 rounded-md border px-3 text-[13px] font-medium ${inclModus === incl ? "border-ink bg-paper-dark" : "border-line bg-white"}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted">
+            {inclModus ? "Je typt het bedrag dat je klant betaalt; de app rekent de BTW eruit. Handig voor consumenten." : "Je typt het bedrag zonder BTW; de app telt de BTW erbij op. Gebruikelijk bij zakelijke klanten."}
+          </p>
+        </div>
+
         <div className="space-y-3">
           {regels.map((r, i) => (
             <div key={i} className="rounded-md border border-line bg-white p-3">
@@ -344,8 +378,12 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
                 <Field label="Aantal">
                   <Input type="number" inputMode="decimal" step="any" value={r.aantal} onChange={(e) => zetRegel(i, { aantal: Number(e.target.value) })} />
                 </Field>
-                <Field label="Prijs excl.">
-                  <Input type="number" inputMode="decimal" step="0.01" value={r.prijs_excl} onChange={(e) => zetRegel(i, { prijs_excl: Number(e.target.value) })} />
+                <Field label={inclModus ? "Prijs incl." : "Prijs excl."}>
+                  {inclModus ? (
+                    <Input type="number" inputMode="decimal" step="0.01" value={r.prijs_incl ?? 0} onChange={(e) => zetRegel(i, { prijs_incl: Number(e.target.value) })} />
+                  ) : (
+                    <Input type="number" inputMode="decimal" step="0.01" value={r.prijs_excl} onChange={(e) => zetRegel(i, { prijs_excl: Number(e.target.value) })} />
+                  )}
                 </Field>
                 <Field label="BTW">
                   <Select value={nulBtw ? 0 : r.btw_percentage} disabled={nulBtw} onChange={(e) => zetRegel(i, { btw_percentage: Number(e.target.value) })}>
@@ -357,7 +395,9 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
               </div>
               {redenen[i] && <p className="-mt-2 mb-2 flex gap-1.5 text-[11.5px] leading-relaxed text-muted"><Sparkles size={12} className="mt-0.5 shrink-0" /> {redenen[i]}</p>}
               <div className="flex items-center justify-between">
-                <span className="mono text-[12px] text-muted">Regel excl. BTW: {formatCurrency(regelTotaalExcl(r))}</span>
+                <span className="mono text-[12px] text-muted">
+                  {inclModus ? `Regel incl. BTW: ${formatCurrency(regelCenten(r, nulBtw).incl / 100)} (excl. ${formatCurrency(regelTotaalExcl(r, nulBtw))})` : `Regel excl. BTW: ${formatCurrency(regelTotaalExcl(r, nulBtw))}`}
+                </span>
                 {regels.length > 1 && (
                   <button type="button" onClick={() => setRegels((x) => x.filter((_, j) => j !== i))} className="flex min-h-11 items-center gap-1 px-2 text-[12px] text-muted hover:text-stamp" aria-label={`Verwijder regel ${i + 1}`}>
                     <Trash2 size={14} /> Verwijder
@@ -367,7 +407,7 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
             </div>
           ))}
         </div>
-        <button type="button" onClick={() => setRegels((x) => [...x, { ...LEGE_REGEL }])} className="mt-3 flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-ink underline">
+        <button type="button" onClick={() => setRegels((x) => [...x, inclModus ? { ...LEGE_REGEL, prijs_incl: 0 } : { ...LEGE_REGEL }])} className="mt-3 flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-ink underline">
           <Plus size={14} /> Regel toevoegen
         </button>
 

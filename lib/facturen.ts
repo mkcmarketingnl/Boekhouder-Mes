@@ -15,6 +15,9 @@ export interface FactuurRegel {
   aantal: number;
   prijs_excl: number; // per stuk, excl. BTW
   btw_percentage: number;
+  // Alleen gezet als de gebruiker prijzen inclusief BTW invoert: dan is dit de prijs per stuk zoals getypt en
+  // wordt de excl.-prijs daaruit afgeleid (prijs_excl is dan alleen een afgeleide weergave).
+  prijs_incl?: number | null;
 }
 
 export interface Afzender {
@@ -63,21 +66,55 @@ export interface FactuurTotalen {
   perTarief: BtwPerTarief[]; // hoogste tarief eerst
 }
 
-export const regelTotaalExcl = (r: FactuurRegel) => naarEuro(Math.round(Number(r.aantal) * naarCenten(Number(r.prijs_excl))));
+export const isInclRegel = (r: FactuurRegel) => r.prijs_incl != null && Number.isFinite(Number(r.prijs_incl));
+
+// Bedragen van één regel in hele centen. Bij een prijs incl. BTW is het inclusief-bedrag leidend (precies wat de
+// gebruiker typte) en wordt het exclusief-bedrag daaruit afgeleid; anders andersom.
+export function regelCenten(r: FactuurRegel, nulBtw = false): { excl: number; incl: number } {
+  const pct = nulBtw ? 0 : Number(r.btw_percentage);
+  const aantal = Number(r.aantal);
+  if (isInclRegel(r)) {
+    const incl = Math.round(aantal * naarCenten(Number(r.prijs_incl)));
+    return { incl, excl: Math.round((incl * 100) / (100 + pct)) };
+  }
+  const excl = Math.round(aantal * naarCenten(Number(r.prijs_excl)));
+  return { excl, incl: excl + Math.round((excl * pct) / 100) };
+}
+
+export const regelTotaalExcl = (r: FactuurRegel, nulBtw = false) => naarEuro(regelCenten(r, nulBtw).excl);
+export const regelTotaalIncl = (r: FactuurRegel, nulBtw = false) => naarEuro(regelCenten(r, nulBtw).incl);
+
+// Prijs per stuk excl. BTW zoals die op de factuur komt te staan.
+export function prijsExclWeergave(r: FactuurRegel, nulBtw = false): number {
+  if (!isInclRegel(r)) return Number(r.prijs_excl) || 0;
+  const aantal = Number(r.aantal);
+  return aantal ? naarEuro(Math.round(regelCenten(r, nulBtw).excl / aantal)) : 0;
+}
 
 export function berekenTotalen(regels: FactuurRegel[], opties: { btw_verlegd?: boolean; kor?: boolean } = {}): FactuurTotalen {
   const nulBtw = !!opties.btw_verlegd || !!opties.kor;
-  const grondslagCenten = new Map<number, number>();
+  // Per tarief: regels met een excl.-prijs tellen op als grondslag; regels met een incl.-prijs tellen op als
+  // inclusief-bedrag. Zo blijft een getypt inclusief-totaal exact kloppen en wordt de BTW nooit per regel afgerond.
+  const perPct = new Map<number, { exclSom: number; inclSom: number }>();
   for (const r of regels) {
     const aantal = Number(r.aantal);
-    const prijs = Number(r.prijs_excl);
+    const prijs = Number(isInclRegel(r) ? r.prijs_incl : r.prijs_excl);
     if (!Number.isFinite(aantal) || !Number.isFinite(prijs)) continue;
     const pct = nulBtw ? 0 : Number(r.btw_percentage);
-    grondslagCenten.set(pct, (grondslagCenten.get(pct) ?? 0) + Math.round(aantal * naarCenten(prijs)));
+    const acc = perPct.get(pct) ?? { exclSom: 0, inclSom: 0 };
+    const c = regelCenten(r, nulBtw);
+    if (isInclRegel(r)) acc.inclSom += c.incl;
+    else acc.exclSom += c.excl;
+    perPct.set(pct, acc);
   }
-  const perTarief: BtwPerTarief[] = [...grondslagCenten.entries()]
+  const perTarief: BtwPerTarief[] = [...perPct.entries()]
     .sort((a, b) => b[0] - a[0])
-    .map(([percentage, g]) => ({ percentage, grondslag: naarEuro(g), btw: naarEuro(Math.round((g * percentage) / 100)) }));
+    .map(([percentage, { exclSom, inclSom }]) => {
+      const exclUitIncl = Math.round((inclSom * 100) / (100 + percentage));
+      const grondslag = exclSom + exclUitIncl;
+      const btw = Math.round((exclSom * percentage) / 100) + (inclSom - exclUitIncl);
+      return { percentage, grondslag: naarEuro(grondslag), btw: naarEuro(btw) };
+    });
   const excl = perTarief.reduce((a, t) => a + naarCenten(t.grondslag), 0);
   const btw = perTarief.reduce((a, t) => a + naarCenten(t.btw), 0);
   return { excl: naarEuro(excl), btw: naarEuro(btw), incl: naarEuro(excl + btw), perTarief };
