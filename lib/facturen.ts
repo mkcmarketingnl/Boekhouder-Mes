@@ -12,6 +12,8 @@ export const TEMPLATES: { id: FactuurTemplate; naam: string; omschrijving: strin
 
 export interface FactuurRegel {
   omschrijving: string;
+  // Korte toelichting onder de omschrijving, bijv. "12 uur barwerkzaamheden, 3 t/m 5 oktober".
+  toelichting?: string | null;
   aantal: number;
   prijs_excl: number; // per stuk, excl. BTW
   btw_percentage: number;

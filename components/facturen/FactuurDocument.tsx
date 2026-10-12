@@ -99,7 +99,10 @@ export function FactuurDocument({
             <tbody>
               {gegevens.regels.map((r, i) => (
                 <tr key={i} className={cn(!minimaal && "border-b border-line/70", modern && i % 2 === 1 && "bg-paper-dark/60")}>
-                  <td className="py-2 pr-3 align-top">{r.omschrijving || "—"}</td>
+                  <td className="py-2 pr-3 align-top">
+                    {r.omschrijving || "—"}
+                    {r.toelichting && <div className="mt-0.5 whitespace-pre-line text-[11px] text-muted">{r.toelichting}</div>}
+                  </td>
                   <td className="mono py-2 pr-3 text-right align-top">{r.aantal}</td>
                   <td className="mono py-2 pr-3 text-right align-top">{formatCurrency(prijsExclWeergave(r, nulBtw))}</td>
                   <td className="mono py-2 pr-3 text-right align-top">{gegevens.btw_verlegd || gegevens.kor ? "0%" : `${r.btw_percentage}%`}</td>

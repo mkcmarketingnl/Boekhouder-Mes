@@ -30,6 +30,7 @@ Waar je op let (alleen melden als het echt speelt):
 - Past het BTW-tarief bij wat er wordt omschreven? (bijv. een boek op 21% of consultancy op 9%.)
 - Klopt de BTW-situatie met de klant? (klant in ander EU-land met BTW-nummer → meestal verlegd; klant buiten de EU → meestal 0%; Nederlandse klant → 21%/9%.)
 - Ontbreekt er iets wat de wet op een factuur eist (datum, uniek nummer, naam en adres van beide partijen, BTW-nummer van de leverancier, omschrijving en hoeveelheid, prijs excl. BTW, tarief, BTW-bedrag, totaal)?
+- Een regel kan naast de omschrijving een korte toelichting hebben (bijv. aantal uren of een periode). Beschouw die als onderdeel van de omschrijving: klopt het aantal met wat er in de toelichting staat (12 uur en aantal 12)?
 - Zijn omschrijvingen te vaag om te begrijpen wat er is geleverd (bijv. "diensten" zonder meer)?
 - Lijkt iets een typefout of inconsistentie (naam klant vs. e-mail, rare aantallen of prijzen, bedragen die niet logisch zijn voor de omschrijving, een leverdatum ná de factuurdatum, een erg lange of erg korte betaaltermijn)?
 - Staat er een bijzondere regeling (KOR, verlegd) zonder de verplichte vermelding?

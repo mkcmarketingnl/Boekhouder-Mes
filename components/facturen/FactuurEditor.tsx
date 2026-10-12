@@ -358,6 +358,9 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
               <Field label={`Omschrijving regel ${i + 1}`}>
                 <Textarea rows={2} value={r.omschrijving} onChange={(e) => zetRegel(i, { omschrijving: e.target.value })} placeholder="Bijv. Webdesign — homepage en 3 subpagina's" className="min-h-0" />
               </Field>
+              <Field label="Korte beschrijving (optioneel)" hint="Handig voor uren of een periode, bijv. 12 uur barwerkzaamheden, 3 t/m 5 oktober.">
+                <Textarea rows={2} value={r.toelichting ?? ""} maxLength={500} onChange={(e) => zetRegel(i, { toelichting: e.target.value })} placeholder="Bijv. 12 uur barwerkzaamheden op 3, 4 en 5 oktober" className="min-h-0" />
+              </Field>
               <div className="grid grid-cols-3 gap-2">
                 <Field label="Aantal">
                   <DecimalInput value={r.aantal} onValueChange={(n) => zetRegel(i, { aantal: n })} placeholder="1" />

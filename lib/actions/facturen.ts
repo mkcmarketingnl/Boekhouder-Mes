@@ -135,6 +135,8 @@ function opschonenRegels(regels: FactuurRegel[]): FactuurRegel[] {
       prijs_excl: Number(r.prijs_excl) || 0,
       btw_percentage: [21, 9, 0].includes(Number(r.btw_percentage)) ? Number(r.btw_percentage) : 21,
     };
+    const toelichting = (r.toelichting ?? "").trim().slice(0, 500);
+    if (toelichting) schoon.toelichting = toelichting;
     // Incl.-prijs blijft leidend; prijs_excl is dan de afgeleide weergave (de KOR/verlegd-regel wordt pas bij het berekenen toegepast).
     if (r.prijs_incl != null && Number.isFinite(Number(r.prijs_incl))) {
       schoon.prijs_incl = Number(r.prijs_incl);
