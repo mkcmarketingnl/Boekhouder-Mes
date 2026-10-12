@@ -5,6 +5,7 @@ import { Field } from "@/components/ui/Field";
 import { Input, Select } from "@/components/ui/Input";
 import { formatCurrency } from "@/lib/format";
 import { maakRegel } from "@/lib/btw";
+import { normaliseerInvoer } from "@/lib/decimal";
 import {
   BTW_VOLGORDE,
   bedragenUitWaarde,
@@ -35,11 +36,14 @@ export function BedragBtwFields({
         <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
           <Field label="Totaalbedrag incl. BTW">
             <Input
-              type="number"
+              type="text"
               inputMode="decimal"
-              step="0.01"
-              value={waarde.bedragInclBtw}
-              onChange={(e) => onChange({ ...waarde, bedragInclBtw: e.target.value })}
+              autoComplete="off"
+              value={waarde.bedragInclBtw.replace(".", ",")}
+              onChange={(e) => {
+                const n = normaliseerInvoer(e.target.value);
+                if (n !== null) onChange({ ...waarde, bedragInclBtw: n });
+              }}
               placeholder="0,00"
             />
           </Field>
@@ -115,11 +119,14 @@ export function BedragBtwFields({
                   </Select>
                   <Input
                     aria-label={`Bedrag incl. BTW regel ${i + 1}`}
-                    type="number"
+                    type="text"
                     inputMode="decimal"
-                    step="0.01"
-                    value={r.bedrag}
-                    onChange={(e) => zetRegel(i, { bedrag: e.target.value })}
+                    autoComplete="off"
+                    value={r.bedrag.replace(".", ",")}
+                    onChange={(e) => {
+                      const n = normaliseerInvoer(e.target.value);
+                      if (n !== null) zetRegel(i, { bedrag: n });
+                    }}
                     placeholder="Bedrag incl. BTW"
                   />
                   <button
