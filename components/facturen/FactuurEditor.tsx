@@ -11,6 +11,7 @@ import { Input, Select, Textarea } from "@/components/ui/Input";
 import { FactuurDocument } from "@/components/facturen/FactuurDocument";
 import { bewaarFactuur, maakDefinitief, verwijderConcept, wijzigDefinitief } from "@/lib/actions/facturen";
 import { formatCurrency } from "@/lib/format";
+import type { Klant } from "@/lib/klantenDb";
 import {
   LANDEN,
   TEMPLATES,
@@ -39,6 +40,10 @@ interface Props {
   nummerVoorbeeld: string;
   vorigNummer: string | null;
   vandaag: string;
+  // Opgeslagen klanten (leeg/uit zolang migratie 0007 ontbreekt)
+  klanten?: Klant[];
+  klantenBeschikbaar?: boolean;
+  startKlant?: Klant | null;
 }
 
 interface ControleResultaat {
@@ -50,20 +55,22 @@ interface ControleResultaat {
 const LEGE_REGEL: FactuurRegel = { omschrijving: "", aantal: 1, prijs_excl: 0, btw_percentage: 21 };
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, standaardTemplate, standaardNotitie, nummerVoorbeeld, vorigNummer, vandaag }: Props) {
+export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, standaardTemplate, standaardNotitie, nummerVoorbeeld, vorigNummer, vandaag, klanten = [], klantenBeschikbaar = false, startKlant = null }: Props) {
   const router = useRouter();
   const [id, setId] = useState<string | null>(bestaande?.id ?? null);
   // Een al definitieve factuur aanpassen: nummer blijft, omzetboeking beweegt mee.
   const isDefinitief = bestaande?.status === "definitief";
 
-  const [klantNaam, setKlantNaam] = useState(bestaande?.klant_naam ?? "");
-  const [klantAdres, setKlantAdres] = useState(bestaande?.klant_adres ?? "");
-  const [klantPostcode, setKlantPostcode] = useState(bestaande?.klant_postcode ?? "");
-  const [klantPlaats, setKlantPlaats] = useState(bestaande?.klant_plaats ?? "");
-  const [klantLand, setKlantLand] = useState(bestaande?.klant_land ?? "Nederland");
-  const [klantBtw, setKlantBtw] = useState(bestaande?.klant_btw_nummer ?? "");
-  const [klantKvk, setKlantKvk] = useState(bestaande?.klant_kvk ?? "");
-  const [klantEmail, setKlantEmail] = useState(bestaande?.klant_email ?? "");
+  const [klantNaam, setKlantNaam] = useState(bestaande?.klant_naam ?? startKlant?.naam ?? "");
+  const [klantAdres, setKlantAdres] = useState(bestaande?.klant_adres ?? startKlant?.adres ?? "");
+  const [klantPostcode, setKlantPostcode] = useState(bestaande?.klant_postcode ?? startKlant?.postcode ?? "");
+  const [klantPlaats, setKlantPlaats] = useState(bestaande?.klant_plaats ?? startKlant?.plaats ?? "");
+  const [klantLand, setKlantLand] = useState(bestaande?.klant_land ?? startKlant?.land ?? "Nederland");
+  const [klantBtw, setKlantBtw] = useState(bestaande?.klant_btw_nummer ?? startKlant?.btw_nummer ?? "");
+  const [klantKvk, setKlantKvk] = useState(bestaande?.klant_kvk ?? startKlant?.kvk ?? "");
+  const [klantEmail, setKlantEmail] = useState(bestaande?.klant_email ?? startKlant?.email ?? "")
+  const [gekozenKlant, setGekozenKlant] = useState(startKlant?.id ?? "");
+  const [klantBewaren, setKlantBewaren] = useState(true);;
 
   const [factuurdatum, setFactuurdatum] = useState(bestaande?.factuurdatum ?? vandaag);
   const [vervaldatum, setVervaldatum] = useState(bestaande?.vervaldatum ?? plusDagen(vandaag, betaaltermijnDagen));
@@ -131,7 +138,22 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
       btw_verlegd: verlegd,
       notitie,
       template,
+      klant_bewaren: klantenBeschikbaar && klantBewaren,
     };
+  }
+
+  function kiesKlant(klantId: string) {
+    setGekozenKlant(klantId);
+    const k = klanten.find((x) => x.id === klantId);
+    if (!k) return;
+    setKlantNaam(k.naam);
+    setKlantAdres(k.adres ?? "");
+    setKlantPostcode(k.postcode ?? "");
+    setKlantPlaats(k.plaats ?? "");
+    setKlantLand(k.land);
+    setKlantBtw(k.btw_nummer ?? "");
+    setKlantKvk(k.kvk ?? "");
+    setKlantEmail(k.email ?? "");
   }
 
   function zetRegel(i: number, patch: Partial<FactuurRegel>) {
@@ -307,6 +329,19 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
       )}
       <Card className="p-5">
         <h2 className="display mb-4 text-[15px] font-semibold">Klant</h2>
+        {klanten.length > 0 && (
+          <Field label="Opgeslagen klant kiezen" hint="Vult de gegevens hieronder in. Je kunt ze daarna nog aanpassen.">
+            <Select value={gekozenKlant} onChange={(e) => kiesKlant(e.target.value)}>
+              <option value="">— Nieuwe klant —</option>
+              {klanten.map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.naam}
+                  {k.plaats ? ` (${k.plaats})` : ""}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field label="Naam van je klant">
           <Input value={klantNaam} onChange={(e) => setKlantNaam(e.target.value)} placeholder="Bijv. Studio Noord B.V." autoComplete="off" />
         </Field>
@@ -341,6 +376,15 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
         <Field label="E-mailadres klant (optioneel)">
           <Input type="email" value={klantEmail} onChange={(e) => setKlantEmail(e.target.value)} autoComplete="off" />
         </Field>
+        {klantenBeschikbaar && (
+          <label className="flex min-h-11 cursor-pointer items-start gap-2.5 text-[13px]">
+            <input type="checkbox" checked={klantBewaren} onChange={(e) => setKlantBewaren(e.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-[#211F1C]" />
+            <span>
+              Deze klant bewaren voor de volgende keer
+              <span className="block text-[11.5px] text-muted">Gegevens van een bestaande klant worden bijgewerkt. Je beheert je klanten onder Facturen → Klanten.</span>
+            </span>
+          </label>
+        )}
       </Card>
 
       <Card className="p-5">

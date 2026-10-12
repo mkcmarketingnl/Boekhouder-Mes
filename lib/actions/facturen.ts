@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getAccessStatus } from "@/lib/subscription";
+import { bewaarKlantUitFactuur } from "@/lib/klantenDb";
 import {
   bouwAfzender,
   berekenTotalen,
@@ -126,6 +127,12 @@ export interface FactuurInvoer {
   btw_verlegd: boolean;
   notitie: string;
   template: FactuurTemplate;
+  // Klant ook in je klantenlijst bewaren/bijwerken
+  klant_bewaren?: boolean;
+}
+
+function klantUit(i: FactuurInvoer) {
+  return { naam: i.klant_naam, adres: i.klant_adres, postcode: i.klant_postcode, plaats: i.klant_plaats, land: i.klant_land, btw_nummer: i.klant_btw_nummer, kvk: i.klant_kvk, email: i.klant_email };
 }
 
 function opschonenRegels(regels: FactuurRegel[]): FactuurRegel[] {
@@ -184,6 +191,7 @@ export async function bewaarFactuur(invoer: FactuurInvoer): Promise<ActieResulta
     const { data, error } = await supabase.from("sales_invoices").update(rij).eq("id", invoer.id).eq("status", "concept").select("id");
     if (error) return { fout: dbFout(error, "Opslaan van het concept is mislukt.") };
     if (!data || data.length === 0) return { fout: "Deze factuur is al definitief en kan niet meer worden gewijzigd." };
+    if (invoer.klant_bewaren) await bewaarKlantUitFactuur(supabase, user.id, klantUit(invoer));
     revalidatePath("/facturen", "layout");
     return { fout: null, data: { id: invoer.id } };
   }
@@ -193,6 +201,7 @@ export async function bewaarFactuur(invoer: FactuurInvoer): Promise<ActieResulta
   const tijdelijk = `CONCEPT-${crypto.randomUUID().slice(0, 8)}`;
   const { data, error } = await supabase.from("sales_invoices").insert({ ...rij, user_id: user.id, factuurnummer: tijdelijk, status: "concept" }).select("id").single();
   if (error || !data) return { fout: error ? dbFout(error, "Opslaan van het concept is mislukt.") : "Opslaan is mislukt." };
+  if (invoer.klant_bewaren) await bewaarKlantUitFactuur(supabase, user.id, klantUit(invoer));
   revalidatePath("/facturen", "layout");
   return { fout: null, data: { id: data.id } };
 }
@@ -525,6 +534,7 @@ export async function wijzigDefinitief(
 
   revalidatePath("/facturen", "layout");
   revalidatePath("/dashboard");
+  if (invoer.klant_bewaren) await bewaarKlantUitFactuur(supabase, user.id, klantUit(invoer));
   revalidatePath("/relaties");
   revalidatePath("/btw");
   return { fout: null, data: { id } };

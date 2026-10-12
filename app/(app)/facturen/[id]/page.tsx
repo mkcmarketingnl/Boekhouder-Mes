@@ -7,6 +7,7 @@ import { FactuurDocument } from "@/components/facturen/FactuurDocument";
 import { FactuurActies } from "@/components/facturen/FactuurActies";
 import { MigratieNotice } from "@/components/facturen/MigratieNotice";
 import { laadFactuurContext } from "@/lib/facturenContext";
+import { laadKlanten } from "@/lib/klantenDb";
 import { formatDate } from "@/lib/format";
 import { bouwAfzender, formatFactuurnummer, vandaagNl, type FactuurGegevens, type SalesInvoice } from "@/lib/facturen";
 
@@ -30,6 +31,7 @@ export default async function FactuurPage({ params }: { params: Promise<{ id: st
   );
 
   if (factuur.status === "concept") {
+    const { beschikbaar: klantenBeschikbaar, klanten } = await laadKlanten(supabase, user!.id);
     return (
       <div className="fade-in space-y-5">
         <div>
@@ -46,6 +48,8 @@ export default async function FactuurPage({ params }: { params: Promise<{ id: st
           nummerVoorbeeld={settings ? formatFactuurnummer(settings.factuurnummer_prefix, settings.volgend_factuurnummer) : "—"}
           vorigNummer={vorigNummer}
           vandaag={vandaagNl()}
+          klanten={klanten}
+          klantenBeschikbaar={klantenBeschikbaar}
         />
       </div>
     );

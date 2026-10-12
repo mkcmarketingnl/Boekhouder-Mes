@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FilePlus2, Settings } from "lucide-react";
+import { FilePlus2, Settings, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { MigratieNotice } from "@/components/facturen/MigratieNotice";
@@ -32,6 +32,9 @@ export default async function FacturenPage() {
         </div>
         {!tabelOntbreekt && (
           <div className="flex w-full flex-col gap-2 min-[480px]:w-auto min-[480px]:flex-row">
+            <Link href="/facturen/klanten" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-line bg-white px-4 text-sm font-semibold hover:bg-paper-dark">
+              <Users size={15} /> Klanten
+            </Link>
             <Link href="/facturen/instellingen" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-line bg-white px-4 text-sm font-semibold hover:bg-paper-dark">
               <Settings size={15} /> Instellingen
             </Link>

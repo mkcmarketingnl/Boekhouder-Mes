@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { FactuurEditor } from "@/components/facturen/FactuurEditor";
 import { MigratieNotice } from "@/components/facturen/MigratieNotice";
 import { laadFactuurContext } from "@/lib/facturenContext";
+import { laadKlanten } from "@/lib/klantenDb";
 import { bouwAfzender, vandaagNl, type SalesInvoice } from "@/lib/facturen";
 
 // Een definitieve factuur aanpassen. Een concept bewerk je gewoon op /facturen/[id].
@@ -21,6 +22,8 @@ export default async function FactuurBewerkenPage({ params }: { params: Promise<
   const factuur = data as SalesInvoice | null;
   if (!factuur) notFound();
   if (factuur.status === "concept") redirect(`/facturen/${id}`);
+
+  const { beschikbaar: klantenBeschikbaar } = await laadKlanten(supabase, user!.id);
 
   return (
     <div className="fade-in space-y-5">
@@ -40,6 +43,7 @@ export default async function FactuurBewerkenPage({ params }: { params: Promise<
         nummerVoorbeeld={factuur.factuurnummer}
         vorigNummer={null}
         vandaag={vandaagNl()}
+        klantenBeschikbaar={klantenBeschikbaar}
       />
     </div>
   );

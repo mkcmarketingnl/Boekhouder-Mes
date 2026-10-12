@@ -5,16 +5,19 @@ import { createClient } from "@/lib/supabase/server";
 import { FactuurEditor } from "@/components/facturen/FactuurEditor";
 import { MigratieNotice } from "@/components/facturen/MigratieNotice";
 import { laadFactuurContext } from "@/lib/facturenContext";
+import { laadKlanten } from "@/lib/klantenDb";
 import { bouwAfzender, formatFactuurnummer, vandaagNl } from "@/lib/facturen";
 
-export default async function NieuweFactuurPage() {
+export default async function NieuweFactuurPage({ searchParams }: { searchParams: Promise<{ klant?: string }> }) {
+  const { klant } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   const { tabelOntbreekt, settings, profiel, vorigNummer } = await laadFactuurContext(supabase, user!.id);
 
-  if (!tabelOntbreekt && !settings) redirect("/facturen/instellingen?terug=/facturen/nieuw");
+  if (!tabelOntbreekt && !settings) redirect(`/facturen/instellingen?terug=${encodeURIComponent(klant ? `/facturen/nieuw?klant=${klant}` : "/facturen/nieuw")}`);
+  const { beschikbaar: klantenBeschikbaar, klanten } = await laadKlanten(supabase, user!.id);
 
   return (
     <div className="fade-in space-y-5">
@@ -37,6 +40,9 @@ export default async function NieuweFactuurPage() {
           nummerVoorbeeld={formatFactuurnummer(settings.factuurnummer_prefix, settings.volgend_factuurnummer)}
           vorigNummer={vorigNummer}
           vandaag={vandaagNl()}
+          klanten={klanten}
+          klantenBeschikbaar={klantenBeschikbaar}
+          startKlant={klanten.find((k) => k.id === klant) ?? null}
         />
       )}
     </div>
