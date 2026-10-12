@@ -9,7 +9,7 @@ import { Field } from "@/components/ui/Field";
 import { DecimalInput } from "@/components/ui/DecimalInput";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { FactuurDocument } from "@/components/facturen/FactuurDocument";
-import { bewaarFactuur, maakDefinitief, verwijderConcept } from "@/lib/actions/facturen";
+import { bewaarFactuur, maakDefinitief, verwijderConcept, wijzigDefinitief } from "@/lib/actions/facturen";
 import { formatCurrency } from "@/lib/format";
 import {
   LANDEN,
@@ -53,6 +53,8 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, standaardTemplate, standaardNotitie, nummerVoorbeeld, vorigNummer, vandaag }: Props) {
   const router = useRouter();
   const [id, setId] = useState<string | null>(bestaande?.id ?? null);
+  // Een al definitieve factuur aanpassen: nummer blijft, omzetboeking beweegt mee.
+  const isDefinitief = bestaande?.status === "definitief";
 
   const [klantNaam, setKlantNaam] = useState(bestaande?.klant_naam ?? "");
   const [klantAdres, setKlantAdres] = useState(bestaande?.klant_adres ?? "");
@@ -251,6 +253,25 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
     router.refresh();
   }
 
+  async function wijzigOpslaan(akkoord: boolean) {
+    if (!id) return;
+    setMelding(null);
+    setBezig("definitief");
+    const res = await wijzigDefinitief(id, invoer(), akkoord);
+    setBezig(null);
+    if (res.vereistAkkoord) {
+      setWachtOpAkkoord(true);
+      return;
+    }
+    if (res.fout || !res.data) {
+      setMelding({ soort: "fout", tekst: res.fout ?? "Opslaan van de wijzigingen is mislukt." });
+      if (res.bevindingen) setControle({ samenvatting: "Er zijn punten gevonden bij het opslaan.", bevindingen: res.bevindingen, aiGelukt: true });
+      return;
+    }
+    router.push(`/facturen/${id}`);
+    router.refresh();
+  }
+
   async function verwijder() {
     if (!id) {
       router.push("/facturen");
@@ -272,6 +293,18 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
 
   return (
     <div className="space-y-5">
+      {isDefinitief && (
+        <Card className="border-warn/30 bg-warn-bg p-4">
+          <p className="flex gap-2 text-[12.5px] leading-relaxed text-ink">
+            <Info size={15} className="mt-0.5 shrink-0" />
+            <span>
+              Je past een <strong>definitieve</strong> factuur aan. Het factuurnummer blijft hetzelfde en de oude versie wordt bewaard.
+              {bestaande?.transaction_id ? " Je omzetboeking wordt automatisch meegewijzigd." : ""} Is de factuur al naar je klant gestuurd? Stuur hem dan opnieuw, of maak een creditnota en een nieuwe factuur: zo blijft je administratie
+              voor de Belastingdienst sluitend.
+            </span>
+          </p>
+        </Card>
+      )}
       <Card className="p-5">
         <h2 className="display mb-4 text-[15px] font-semibold">Klant</h2>
         <Field label="Naam van je klant">
@@ -314,7 +347,7 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
         <h2 className="display mb-4 text-[15px] font-semibold">Factuurgegevens</h2>
         <div className="mb-4 rounded-md border border-line bg-paper-dark px-3.5 py-2.5 text-[12.5px] text-muted">
           Factuurnummer:{" "}
-          <strong className="mono text-ink">{bestaande?.status === "definitief" ? bestaande.factuurnummer : nummerVoorbeeld}</strong> — wordt automatisch en oplopend toegekend wanneer je de factuur definitief maakt.
+          <strong className="mono text-ink">{isDefinitief ? bestaande?.factuurnummer : nummerVoorbeeld}</strong>{isDefinitief ? " — dit nummer blijft hetzelfde." : " — wordt automatisch en oplopend toegekend wanneer je de factuur definitief maakt."}
         </div>
         <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
           <Field label="Factuurdatum">
@@ -505,11 +538,11 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
       {wachtOpAkkoord && letOps.length > 0 && (
         <Card className="border-warn/30 bg-warn-bg p-4">
           <p className="mb-3 text-[13px] leading-relaxed text-ink">
-            Er {letOps.length === 1 ? "is 1 aandachtspunt" : `zijn ${letOps.length} aandachtspunten`} (hierboven). Een definitieve factuur kun je daarna niet meer wijzigen. Heb je ze bekeken en klopt alles?
+            Er {letOps.length === 1 ? "is 1 aandachtspunt" : `zijn ${letOps.length} aandachtspunten`} (hierboven). {isDefinitief ? "Heb je ze bekeken en wil je de wijzigingen toch opslaan?" : "Je kunt de factuur daarna nog aanpassen, maar dat laat een spoor achter. Heb je ze bekeken en klopt alles?"}
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={() => definitiefMaken(true)} loading={bezig === "definitief"} disabled={drukBezig}>
-              Ja, maak definitief
+            <Button type="button" onClick={() => (isDefinitief ? wijzigOpslaan(true) : definitiefMaken(true))} loading={bezig === "definitief"} disabled={drukBezig}>
+              {isDefinitief ? "Ja, sla de wijzigingen op" : "Ja, maak definitief"}
             </Button>
             <Button type="button" variant="ghost" onClick={() => setWachtOpAkkoord(false)} disabled={drukBezig}>
               Nee, ik ga het aanpassen
@@ -518,6 +551,19 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
         </Card>
       )}
 
+      {isDefinitief ? (
+        <div className="space-y-3 pb-4">
+          <div className="flex flex-col gap-2 min-[480px]:flex-row">
+            <Button type="button" onClick={() => wijzigOpslaan(false)} loading={bezig === "definitief"} disabled={drukBezig && bezig !== "definitief"} className="justify-center">
+              Wijzigingen opslaan
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => router.push(`/facturen/${id}`)} disabled={drukBezig} className="justify-center">
+              Annuleren
+            </Button>
+          </div>
+          <p className="text-[11.5px] leading-relaxed text-muted">Na het opslaan kun je op de factuurpagina de AI-controle opnieuw draaien.</p>
+        </div>
+      ) : (
       <div className="space-y-3 pb-4">
         <label className="flex min-h-11 cursor-pointer items-start gap-2.5 text-[13px]">
           <input type="checkbox" checked={boekInOmzet} onChange={(e) => setBoekInOmzet(e.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-[#211F1C]" />
@@ -542,6 +588,7 @@ export function FactuurEditor({ bestaande, afzender, kor, betaaltermijnDagen, st
           {id ? "Dit concept verwijderen" : "Annuleren"}
         </button>
       </div>
+      )}
     </div>
   );
 }

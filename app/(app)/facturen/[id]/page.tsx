@@ -7,6 +7,7 @@ import { FactuurDocument } from "@/components/facturen/FactuurDocument";
 import { FactuurActies } from "@/components/facturen/FactuurActies";
 import { MigratieNotice } from "@/components/facturen/MigratieNotice";
 import { laadFactuurContext } from "@/lib/facturenContext";
+import { formatDate } from "@/lib/format";
 import { bouwAfzender, formatFactuurnummer, vandaagNl, type FactuurGegevens, type SalesInvoice } from "@/lib/facturen";
 
 export default async function FactuurPage({ params }: { params: Promise<{ id: string }> }) {
@@ -75,7 +76,10 @@ export default async function FactuurPage({ params }: { params: Promise<{ id: st
       <div className="print:hidden">
         {terug}
         <h1 className="display text-2xl font-semibold">Factuur {factuur.factuurnummer}</h1>
-        <p className="mt-1 text-sm text-muted">Definitief — deze factuur kan niet meer worden gewijzigd.</p>
+        <p className="mt-1 text-sm text-muted">
+          Definitief{factuur.gewijzigd_op ? ` · aangepast op ${formatDate(factuur.gewijzigd_op.slice(0, 10))}` : ""}
+          {factuur.eerdere_versies && factuur.eerdere_versies.length > 0 ? ` · ${factuur.eerdere_versies.length} eerdere ${factuur.eerdere_versies.length === 1 ? "versie" : "versies"} bewaard` : ""}
+        </p>
       </div>
       <FactuurDocument gegevens={gegevens} afzender={afzender} template={factuur.template} />
       <FactuurActies id={factuur.id} geboekt={!!factuur.transaction_id} controle={factuur.ai_controle} />

@@ -16,6 +16,7 @@ import {
   volgnummerUit,
   type Bevinding,
   type FactuurGegevens,
+  type FactuurVersie,
   type FactuurRegel,
   type FactuurTemplate,
   type InvoiceSettings,
@@ -378,4 +379,153 @@ export async function boekInOmzet(id: string): Promise<ActieResultaat> {
   revalidatePath("/dashboard");
   revalidatePath("/relaties");
   return { fout: null };
+}
+
+// ---------- definitieve factuur aanpassen ----------
+
+function versieVan(f: SalesInvoice): FactuurVersie {
+  return {
+    vastgelegd_op: new Date().toISOString(),
+    klant_naam: f.klant_naam,
+    klant_adres: f.klant_adres,
+    klant_postcode: f.klant_postcode,
+    klant_plaats: f.klant_plaats,
+    klant_land: f.klant_land,
+    klant_btw_nummer: f.klant_btw_nummer,
+    klant_kvk: f.klant_kvk,
+    klant_email: f.klant_email,
+    factuurdatum: f.factuurdatum,
+    vervaldatum: f.vervaldatum,
+    leverdatum: f.leverdatum,
+    regels: f.regels,
+    btw_verlegd: f.btw_verlegd,
+    notitie: f.notitie,
+    totaal_excl: Number(f.totaal_excl),
+    totaal_btw: Number(f.totaal_btw),
+    totaal_incl: Number(f.totaal_incl),
+  };
+}
+
+const MIGRATIE_BEWERKEN_MELDING =
+  "Een definitieve factuur aanpassen heeft een eenmalige database-update nodig (migratie 0006_factuur_aanpassen.sql in Supabase).";
+
+// Past een definitieve factuur aan. Het factuurnummer blijft hetzelfde. De oude inhoud wordt bewaard (controlespoor)
+// en als de factuur al in je omzet is geboekt, wordt die boeking meegewijzigd zodat dashboard, BTW-modus en
+// relaties blijven kloppen.
+export async function wijzigDefinitief(
+  id: string,
+  invoer: FactuurInvoer,
+  akkoordLetOps: boolean
+): Promise<ActieResultaat<{ id: string }> & { bevindingen?: Bevinding[]; vereistAkkoord?: boolean }> {
+  const { supabase, user, hasAccess } = await context();
+  if (!user || !hasAccess) return { fout: GEEN_TOEGANG };
+
+  const { data: rij, error: leesFout } = await supabase.from("sales_invoices").select("*").eq("id", id).maybeSingle();
+  if (leesFout) return { fout: dbFout(leesFout, "Factuur ophalen is mislukt.") };
+  const oud = rij as SalesInvoice | null;
+  if (!oud) return { fout: "Factuur niet gevonden." };
+  if (oud.status !== "definitief") return { fout: "Dit is nog een concept; sla het gewoon op als concept." };
+
+  const [{ data: settingsRij }, { data: profielRij }] = await Promise.all([
+    supabase.from("invoice_settings").select("*").eq("user_id", user.id).maybeSingle(),
+    supabase.from("profiles").select("bedrijfsnaam, kvk_nummer, btw_nummer").eq("user_id", user.id).maybeSingle(),
+  ]);
+  if (!profielRij) return { fout: "Bedrijfsprofiel ontbreekt." };
+  // Bedrijfsgegevens worden ververst, zodat je bijvoorbeeld een verkeerd IBAN kunt herstellen.
+  const afzender = bouwAfzender(profielRij, settingsRij as InvoiceSettings | null);
+
+  const kor = oud.kor;
+  const regels = opschonenRegels(invoer.regels);
+  const totalen = berekenTotalen(regels, { btw_verlegd: invoer.btw_verlegd, kor });
+  const nieuw = {
+    klant_naam: invoer.klant_naam.trim(),
+    klant_adres: schoon(invoer.klant_adres),
+    klant_postcode: schoon(invoer.klant_postcode),
+    klant_plaats: schoon(invoer.klant_plaats),
+    klant_land: schoon(invoer.klant_land) ?? "Nederland",
+    klant_btw_nummer: schoon(invoer.klant_btw_nummer)?.replace(/[\s.]/g, "").toUpperCase() ?? null,
+    klant_kvk: schoon(invoer.klant_kvk),
+    klant_email: schoon(invoer.klant_email),
+    factuurdatum: invoer.factuurdatum || oud.factuurdatum,
+    vervaldatum: invoer.vervaldatum || invoer.factuurdatum || oud.vervaldatum,
+    leverdatum: invoer.leverdatum || null,
+    regels,
+    btw_verlegd: !!invoer.btw_verlegd,
+    notitie: schoon(invoer.notitie),
+    template: invoer.template,
+  };
+
+  const gegevens: FactuurGegevens = { factuurnummer: oud.factuurnummer, ...nieuw, kor };
+  const bevindingen = controleerFactuur(gegevens, afzender, { vorigNummer: null, vandaag: vandaag() });
+  if (bevindingen.some((b) => b.ernst === "fout")) return { fout: "Er zijn nog fouten die je eerst moet oplossen.", bevindingen };
+  if (bevindingen.length > 0 && !akkoordLetOps) return { fout: null, vereistAkkoord: true, bevindingen };
+
+  const eerder = [...(oud.eerdere_versies ?? []), versieVan(oud)].slice(-50);
+  const { data: bijgewerkt, error: updateFout } = await supabase
+    .from("sales_invoices")
+    .update({ ...nieuw, afzender, totaal_excl: totalen.excl, totaal_btw: totalen.btw, totaal_incl: totalen.incl, eerdere_versies: eerder, gewijzigd_op: new Date().toISOString() })
+    .eq("id", id)
+    .eq("status", "definitief")
+    .select("id");
+  if (updateFout) {
+    if (/kan niet meer worden gewijzigd/i.test(updateFout.message) || /eerdere_versies|gewijzigd_op/i.test(updateFout.message)) return { fout: MIGRATIE_BEWERKEN_MELDING };
+    return { fout: dbFout(updateFout, "Opslaan van de wijzigingen is mislukt.") };
+  }
+  if (!bijgewerkt || bijgewerkt.length === 0) return { fout: "Opslaan van de wijzigingen is mislukt." };
+
+  // Staat de factuur in je omzet? Dan moet die boeking exact meebewegen.
+  if (oud.transaction_id) {
+    const btwRegels = naarBtwRegels(totalen);
+    const hoofd = [...totalen.perTarief].sort((a, b) => b.grondslag - a.grondslag)[0]?.percentage ?? 0;
+    const { error: boekFout } = await supabase
+      .from("transactions")
+      .update({
+        factuurdatum: nieuw.factuurdatum,
+        leverancier: nieuw.klant_naam,
+        omschrijving: regels.map((r) => r.omschrijving).filter(Boolean).join("; ").slice(0, 200) || null,
+        bedrag_incl_btw: totalen.incl,
+        bedrag_excl_btw: totalen.excl,
+        btw_bedrag: totalen.btw,
+        btw_percentage: hoofd,
+        btw_regels: btwRegels ?? null,
+      })
+      .eq("id", oud.transaction_id)
+      .eq("user_id", user.id);
+    if (boekFout) {
+      // Niet half laten staan: de factuur gaat terug naar wat hij was.
+      await supabase
+        .from("sales_invoices")
+        .update({
+          klant_naam: oud.klant_naam,
+          klant_adres: oud.klant_adres,
+          klant_postcode: oud.klant_postcode,
+          klant_plaats: oud.klant_plaats,
+          klant_land: oud.klant_land,
+          klant_btw_nummer: oud.klant_btw_nummer,
+          klant_kvk: oud.klant_kvk,
+          klant_email: oud.klant_email,
+          factuurdatum: oud.factuurdatum,
+          vervaldatum: oud.vervaldatum,
+          leverdatum: oud.leverdatum,
+          regels: oud.regels,
+          btw_verlegd: oud.btw_verlegd,
+          notitie: oud.notitie,
+          template: oud.template,
+          afzender: oud.afzender,
+          totaal_excl: oud.totaal_excl,
+          totaal_btw: oud.totaal_btw,
+          totaal_incl: oud.totaal_incl,
+          eerdere_versies: oud.eerdere_versies ?? [],
+          gewijzigd_op: oud.gewijzigd_op ?? null,
+        })
+        .eq("id", id);
+      return { fout: "De factuur kon niet worden aangepast omdat je omzetboeking niet mee kon veranderen. Er is niets gewijzigd." };
+    }
+  }
+
+  revalidatePath("/facturen", "layout");
+  revalidatePath("/dashboard");
+  revalidatePath("/relaties");
+  revalidatePath("/btw");
+  return { fout: null, data: { id } };
 }

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Printer, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, CheckCircle2, Pencil, Printer, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { boekInOmzet } from "@/lib/actions/facturen";
@@ -48,6 +49,9 @@ export function FactuurActies({ id, geboekt, controle }: { id: string; geboekt: 
         <Button type="button" onClick={() => window.print()} className="justify-center">
           <Printer size={15} /> Afdrukken / opslaan als PDF
         </Button>
+        <Link href={`/facturen/${id}/bewerken`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-line bg-white px-4 py-2.5 text-sm font-semibold hover:bg-paper-dark">
+          <Pencil size={14} /> Factuur aanpassen
+        </Link>
         {!geboekt && (
           <Button type="button" variant="secondary" onClick={boek} loading={bezig === "boeken"} disabled={bezig !== null && bezig !== "boeken"} className="justify-center">
             Boek in mijn omzet

@@ -318,7 +318,31 @@ export interface SalesInvoice {
   transaction_id: string | null;
   ai_controle: AiControle | null;
   ai_controle_op: string | null;
+  // Eerdere inhoud van de factuur, één momentopname per wijziging nadat hij definitief was (controlespoor).
+  eerdere_versies?: FactuurVersie[] | null;
+  gewijzigd_op?: string | null;
   created_at: string;
+}
+
+export interface FactuurVersie {
+  vastgelegd_op: string;
+  klant_naam: string;
+  klant_adres: string | null;
+  klant_postcode: string | null;
+  klant_plaats: string | null;
+  klant_land: string;
+  klant_btw_nummer: string | null;
+  klant_kvk: string | null;
+  klant_email: string | null;
+  factuurdatum: string;
+  vervaldatum: string;
+  leverdatum: string | null;
+  regels: FactuurRegel[];
+  btw_verlegd: boolean;
+  notitie: string | null;
+  totaal_excl: number;
+  totaal_btw: number;
+  totaal_incl: number;
 }
 
 // Het bedrijfsprofiel + factuurinstellingen samengevoegd tot wat er op de factuur komt te staan.
