@@ -97,7 +97,8 @@ export interface IbResultaat {
   marginaalTarief: number; // wat een extra euro winst kost, in procent
 }
 
-const cent = (n: number) => Math.round(n * 100) / 100;
+// Afgerond op centen; nooit "-0" (dat zou als € -0,00 op het scherm komen)
+const cent = (n: number) => Math.round(n * 100) / 100 + 0;
 
 function progressief(bedrag: number, schijven: Schijf[]): number {
   let rest = Math.max(0, bedrag);
@@ -226,15 +227,15 @@ export function effectExtraAftrek(invoer: IbInvoer, soort: "pensioen" | "aov" | 
 
 export function ibStappen(r: IbResultaat): IbStap[] {
   const stappen: IbStap[] = [{ sleutel: "winst", label: "Winst uit onderneming", bedrag: r.winst }];
-  if (r.kia > 0) stappen.push({ sleutel: "kia", label: "Kleinschaligheidsinvesteringsaftrek", bedrag: -r.kia });
-  if (r.zelfstandigenaftrek > 0) stappen.push({ sleutel: "zelfstandigenaftrek", label: "Zelfstandigenaftrek", bedrag: -r.zelfstandigenaftrek });
-  if (r.startersaftrek > 0) stappen.push({ sleutel: "startersaftrek", label: "Startersaftrek", bedrag: -r.startersaftrek });
-  stappen.push({ sleutel: "mkb", label: "MKB-winstvrijstelling", bedrag: -r.mkbVrijstelling });
+  if (r.kia > 0) stappen.push({ sleutel: "kia", label: "Kleinschaligheidsinvesteringsaftrek", bedrag: 0 - r.kia });
+  if (r.zelfstandigenaftrek > 0) stappen.push({ sleutel: "zelfstandigenaftrek", label: "Zelfstandigenaftrek", bedrag: 0 - r.zelfstandigenaftrek });
+  if (r.startersaftrek > 0) stappen.push({ sleutel: "startersaftrek", label: "Startersaftrek", bedrag: 0 - r.startersaftrek });
+  stappen.push({ sleutel: "mkb", label: "MKB-winstvrijstelling", bedrag: 0 - r.mkbVrijstelling });
   stappen.push({ sleutel: "belastbareWinst", label: "Belastbare winst", bedrag: r.belastbareWinst });
-  if (r.persoonlijkeAftrek > 0) stappen.push({ sleutel: "persoonlijk", label: "Aftrek AOV en pensioen", bedrag: -r.persoonlijkeAftrek });
+  if (r.persoonlijkeAftrek > 0) stappen.push({ sleutel: "persoonlijk", label: "Aftrek AOV en pensioen", bedrag: 0 - r.persoonlijkeAftrek });
   stappen.push({ sleutel: "brutoIb", label: "Inkomstenbelasting (box 1)", bedrag: r.brutoIb });
-  stappen.push({ sleutel: "ahk", label: "Algemene heffingskorting", bedrag: -r.algemeneHeffingskorting });
-  stappen.push({ sleutel: "ak", label: "Arbeidskorting", bedrag: -r.arbeidskorting });
+  stappen.push({ sleutel: "ahk", label: "Algemene heffingskorting", bedrag: 0 - r.algemeneHeffingskorting });
+  stappen.push({ sleutel: "ak", label: "Arbeidskorting", bedrag: 0 - r.arbeidskorting });
   stappen.push({ sleutel: "zvw", label: "Bijdrage Zorgverzekeringswet", bedrag: r.zvwBijdrage });
   stappen.push({ sleutel: "totaal", label: "Totaal om opzij te zetten", bedrag: r.totaal });
   return stappen;

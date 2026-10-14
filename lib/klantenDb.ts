@@ -48,17 +48,18 @@ export function klantRij(i: KlantInvoer) {
 }
 
 // `beschikbaar` is onwaar zolang migratie 0007 niet is uitgevoerd; de factuurmaker werkt dan gewoon zonder klantenlijst.
-export async function laadKlanten(supabase: SupabaseClient, userId: string): Promise<{ beschikbaar: boolean; klanten: Klant[] }> {
+export async function laadKlanten(supabase: SupabaseClient, userId: string): Promise<{ beschikbaar: boolean; klanten: Klant[]; metTarief: boolean }> {
   let { data, error } = await supabase.from("invoice_customers").select(KOLOMMEN_MET_TARIEF as "*").eq("user_id", userId).order("naam", { ascending: true });
+  let metTarief = !error;
   if (error && /uurtarief/i.test(error.message)) {
     // migratie 0008 nog niet uitgevoerd: zonder uurtarief verder
     ({ data, error } = await supabase.from("invoice_customers").select(KOLOMMEN as "*").eq("user_id", userId).order("naam", { ascending: true }));
   }
   if (error) {
     if (!isTabelOntbreekt(error)) console.error("Klanten laden mislukt:", error.message);
-    return { beschikbaar: false, klanten: [] };
+    return { beschikbaar: false, klanten: [], metTarief: false };
   }
-  return { beschikbaar: true, klanten: (data ?? []) as unknown as Klant[] };
+  return { beschikbaar: true, klanten: (data ?? []) as unknown as Klant[], metTarief };
 }
 
 // Bewaart (of ververst) de klant van een factuur op naam. Faalt nooit hard: de factuur gaat voor.

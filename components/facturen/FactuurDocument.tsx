@@ -103,7 +103,7 @@ export function FactuurDocument({
                     {r.omschrijving || "—"}
                     {r.toelichting && <div className="mt-0.5 whitespace-pre-line text-[11px] text-muted">{r.toelichting}</div>}
                   </td>
-                  <td className="mono py-2 pr-3 text-right align-top">{r.aantal}</td>
+                  <td className="mono py-2 pr-3 text-right align-top">{String(r.aantal).replace(".", ",")}</td>
                   <td className="mono py-2 pr-3 text-right align-top">{formatCurrency(prijsExclWeergave(r, nulBtw))}</td>
                   <td className="mono py-2 pr-3 text-right align-top">{gegevens.btw_verlegd || gegevens.kor ? "0%" : `${r.btw_percentage}%`}</td>
                   <td className="mono py-2 text-right align-top">{formatCurrency(regelTotaalExcl(r, nulBtw))}</td>

@@ -10,7 +10,7 @@ export default async function KlantenPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const { beschikbaar, klanten } = await laadKlanten(supabase, user!.id);
+  const { beschikbaar, klanten, metTarief } = await laadKlanten(supabase, user!.id);
 
   return (
     <div className="fade-in space-y-5">
@@ -22,7 +22,7 @@ export default async function KlantenPage() {
         <p className="mt-1 text-sm leading-relaxed text-muted">Klanten die je een factuur stuurt, bewaar je hier. Zo vul je hun gegevens de volgende keer niet opnieuw in.</p>
       </div>
       {beschikbaar ? (
-        <KlantenBeheer klanten={klanten} metTarief={klanten.length === 0 ? false : "uurtarief" in klanten[0]} />
+        <KlantenBeheer klanten={klanten} metTarief={metTarief} />
       ) : (
         <Card className="border-warn/30 bg-warn-bg p-5">
           <h2 className="display mb-1 text-[15px] font-semibold">Bijna klaar</h2>
