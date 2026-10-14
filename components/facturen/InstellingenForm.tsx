@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
+import { DecimalInput } from "@/components/ui/DecimalInput";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { bewaarInstellingen } from "@/lib/actions/facturen";
 import { LANDEN, TEMPLATES, formatFactuurnummer, isGeldigeIban, type FactuurTemplate } from "@/lib/facturen";
@@ -28,6 +29,8 @@ export interface InstellingenStart {
   standaard_template: FactuurTemplate;
   standaard_notitie: string;
   kor: boolean;
+  // Alleen meegegeven als de database het kent (migratie 0008)
+  standaard_uurtarief?: number | null;
 }
 
 export function InstellingenForm({ start, terugNaar }: { start: InstellingenStart; terugNaar: string }) {
@@ -133,6 +136,11 @@ export function InstellingenForm({ start, terugNaar }: { start: InstellingenStar
         <Field label="Betaaltermijn (dagen)" hint="Standaard 14 dagen. Je kunt het per factuur aanpassen.">
           <Input type="number" inputMode="numeric" min={0} max={365} value={f.betaaltermijn_dagen} onChange={(e) => zet("betaaltermijn_dagen", Number(e.target.value))} />
         </Field>
+        {"standaard_uurtarief" in f && (
+          <Field label="Standaard uurtarief excl. BTW (optioneel)" hint="Wordt gebruikt bij uren van klanten die geen eigen uurtarief hebben.">
+            <DecimalInput value={Number(f.standaard_uurtarief) || 0} onValueChange={(n) => zet("standaard_uurtarief", n > 0 ? n : null)} />
+          </Field>
+        )}
         <Field label="Standaard opmerking onderaan (optioneel)">
           <Textarea rows={3} value={f.standaard_notitie} onChange={(e) => zet("standaard_notitie", e.target.value)} placeholder="Bijv. Bedankt voor je opdracht!" />
         </Field>

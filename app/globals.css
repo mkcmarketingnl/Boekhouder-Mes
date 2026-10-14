@@ -210,10 +210,13 @@ select:focus {
     visibility: hidden;
   }
   #factuur-print,
-  #factuur-print * {
+  #factuur-print *,
+  #jaaroverzicht-print,
+  #jaaroverzicht-print * {
     visibility: visible;
   }
-  #factuur-print {
+  #factuur-print,
+  #jaaroverzicht-print {
     position: absolute;
     left: 0;
     top: 0;

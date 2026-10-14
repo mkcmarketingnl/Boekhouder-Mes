@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { laadTransacties } from "@/lib/transactionsDb";
 import { RelatiesView } from "@/components/relaties/RelatiesView";
 import { aggregateTransactions, groupByLeverancier } from "@/lib/finance";
 import { normalizeSupplierName } from "@/lib/types";
@@ -12,13 +13,7 @@ export default async function RelatiesPage({ searchParams }: { searchParams: Pro
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data } = await supabase
-    .from("transactions")
-    .select("*, documents(file_url)")
-    .eq("user_id", user!.id)
-    .order("factuurdatum", { ascending: false });
-
-  const alle = (data ?? []) as unknown as TransactionWithDoc[];
+  const alle = await laadTransacties<TransactionWithDoc>(supabase, user!.id, { select: "*, documents(file_url)" });
 
   // Standaard het lopende jaar, precies zoals de "Jaar"-weergave op het dashboard — zo staan de
   // totalen hier naast dezelfde cijfers die je daar ziet.

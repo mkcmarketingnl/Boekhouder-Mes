@@ -5,7 +5,8 @@ import { Card } from "@/components/ui/Card";
 import { MigratieNotice } from "@/components/facturen/MigratieNotice";
 import { laadFactuurContext } from "@/lib/facturenContext";
 import { formatCurrency, formatDate } from "@/lib/format";
-import type { SalesInvoice } from "@/lib/facturen";
+import { vandaagNl, type SalesInvoice } from "@/lib/facturen";
+import { betaalStatus, openstaand } from "@/lib/betaling";
 
 export default async function FacturenPage() {
   const supabase = await createClient();
@@ -14,14 +15,21 @@ export default async function FacturenPage() {
   } = await supabase.auth.getUser();
   const { tabelOntbreekt, settings } = await laadFactuurContext(supabase, user!.id);
 
-  const { data } = tabelOntbreekt
-    ? { data: [] }
-    : await supabase
-        .from("sales_invoices")
-        .select("id, status, factuurnummer, klant_naam, factuurdatum, vervaldatum, totaal_incl, transaction_id")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false });
-  const facturen = (data ?? []) as Pick<SalesInvoice, "id" | "status" | "factuurnummer" | "klant_naam" | "factuurdatum" | "vervaldatum" | "totaal_incl" | "transaction_id">[];
+  const kolommen = "id, status, factuurnummer, klant_naam, factuurdatum, vervaldatum, totaal_incl, transaction_id";
+  let data: unknown[] | null = [];
+  if (!tabelOntbreekt) {
+    // Met betaalstatus (migratie 0008); zonder die kolom valt de lijst terug op de oude weergave.
+    const metBetaling = await supabase.from("sales_invoices").select((kolommen + ", betaald_op") as "*").eq("user_id", user!.id).order("created_at", { ascending: false });
+    if (metBetaling.error) {
+      const zonder = await supabase.from("sales_invoices").select(kolommen as "*").eq("user_id", user!.id).order("created_at", { ascending: false });
+      data = zonder.data;
+    } else {
+      data = metBetaling.data;
+    }
+  }
+  const facturen = (data ?? []) as Pick<SalesInvoice, "id" | "status" | "factuurnummer" | "klant_naam" | "factuurdatum" | "vervaldatum" | "totaal_incl" | "transaction_id" | "betaald_op">[];
+  const vandaag = vandaagNl();
+  const open = openstaand(facturen, vandaag);
 
   return (
     <div className="fade-in space-y-6">
@@ -44,6 +52,21 @@ export default async function FacturenPage() {
           </div>
         )}
       </div>
+
+      {!tabelOntbreekt && open.aantal > 0 && (
+        <Card className="p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <div className="text-[12px] text-muted">Nog te ontvangen</div>
+              <div className="mono text-xl font-semibold">{formatCurrency(open.bedrag)}</div>
+            </div>
+            <div className="text-[12.5px] text-muted">
+              {open.aantal} {open.aantal === 1 ? "factuur" : "facturen"} open
+              {open.aantalTeLaat > 0 && <span className="text-stamp"> · {open.aantalTeLaat} te laat ({formatCurrency(open.bedragTeLaat)})</span>}
+            </div>
+          </div>
+        </Card>
+      )}
 
       {tabelOntbreekt ? (
         <MigratieNotice />
@@ -68,8 +91,15 @@ export default async function FacturenPage() {
                   </div>
                   <div className="shrink-0 text-right">
                     <div className="mono text-[14px] font-semibold">{formatCurrency(Number(f.totaal_incl))}</div>
-                    <div className={`mt-0.5 text-[11px] ${f.status === "definitief" ? "text-ok" : "text-warn"}`}>
-                      {f.status === "definitief" ? (f.transaction_id ? "Definitief · in omzet" : "Definitief") : "Concept"}
+                    <div className={`mt-0.5 text-[11px] ${f.status === "concept" ? "text-warn" : betaalStatus(f, vandaag) === "te_laat" ? "text-stamp" : "text-ok"}`}>
+                      {f.status === "concept"
+                        ? "Concept"
+                        : betaalStatus(f, vandaag) === "betaald"
+                          ? "Betaald"
+                          : betaalStatus(f, vandaag) === "te_laat"
+                            ? "Te laat"
+                            : "Open"}
+                      {f.status === "definitief" && f.transaction_id ? " · in omzet" : ""}
                     </div>
                   </div>
                 </div>

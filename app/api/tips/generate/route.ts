@@ -3,7 +3,8 @@ import { getAnthropicClient, CLAUDE_MODEL_FAST } from "@/lib/anthropic/client";
 import { getAccessStatus } from "@/lib/subscription";
 import { TIPS_SYSTEM_PROMPT, buildTipsUserPrompt } from "@/lib/anthropic/prompts";
 import { aggregateTransactions, getPeriodBounds, groupByLeverancier } from "@/lib/finance";
-import { estimateIncomeTax } from "@/lib/tax";
+import { schatBelasting } from "@/lib/belastingDb";
+import { laadTransacties } from "@/lib/transactionsDb";
 import { formatDateInput } from "@/lib/format";
 import type { Profile, Transaction } from "@/lib/types";
 
@@ -55,17 +56,12 @@ export async function POST() {
   const jaar = new Date().getFullYear();
   const { start, end } = getPeriodBounds("jaar");
 
-  const { data: transactions } = await supabase
-    .from("transactions")
-    .select("*")
-    .eq("user_id", user.id)
-    .gte("factuurdatum", formatDateInput(start))
-    .lte("factuurdatum", formatDateInput(end));
+  const transactions = await laadTransacties<Transaction>(supabase, user.id, { van: formatDateInput(start), tot: formatDateInput(end) });
 
-  const snapshot = aggregateTransactions((transactions ?? []) as Transaction[]);
-  const belasting = estimateIncomeTax(profile.rechtsvorm, snapshot.winst);
+  const snapshot = aggregateTransactions(transactions);
+  const belasting = await schatBelasting(supabase, user.id, profile.rechtsvorm, snapshot.winst, jaar);
 
-  const alleTransacties = (transactions ?? []) as Transaction[];
+  const alleTransacties = transactions;
   const topRelaties = [...groupByLeverancier(alleTransacties, "kosten"), ...groupByLeverancier(alleTransacties, "omzet")]
     .sort((a, b) => b.totaalExcl - a.totaalExcl)
     .slice(0, 5)

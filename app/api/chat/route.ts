@@ -4,7 +4,11 @@ import { getAnthropicClient, CLAUDE_MODEL } from "@/lib/anthropic/client";
 import { getAccessStatus } from "@/lib/subscription";
 import { MES_CHAT_SYSTEM_PROMPT, buildMesContext } from "@/lib/anthropic/prompts";
 import { aggregateTransactions, getPeriodBounds } from "@/lib/finance";
-import { estimateIncomeTax } from "@/lib/tax";
+import { schatBelasting } from "@/lib/belastingDb";
+import { laadTransacties } from "@/lib/transactionsDb";
+import { laadGeld } from "@/lib/geldDb";
+import { dagenVoorbijInJaar, geldContextVoorMes, inkomenUitAdministratie } from "@/lib/geldInkomen";
+import { vandaagNl } from "@/lib/facturen";
 import { formatDateInput } from "@/lib/format";
 import type { ChatMessage, Profile, Transaction } from "@/lib/types";
 
@@ -100,15 +104,23 @@ export async function POST(request: NextRequest) {
   }
 
   const { start, end } = getPeriodBounds("jaar");
-  const { data: yearTransactions } = await supabase
-    .from("transactions")
-    .select("*")
-    .eq("user_id", user.id)
-    .gte("factuurdatum", formatDateInput(start))
-    .lte("factuurdatum", formatDateInput(end));
+  const yearTransactions = await laadTransacties<Transaction>(supabase, user.id, { van: formatDateInput(start), tot: formatDateInput(end) });
 
-  const snapshot = aggregateTransactions((yearTransactions ?? []) as Transaction[]);
-  const belasting = estimateIncomeTax(profile.rechtsvorm, snapshot.winst);
+  const snapshot = aggregateTransactions(yearTransactions);
+  const belasting = await schatBelasting(supabase, user.id, profile.rechtsvorm, snapshot.winst, new Date().getFullYear());
+
+  let geldContext = "";
+  {
+    // Privé-financiën gaan alleen naar de AI als de gebruiker dat in Money mode heeft aangezet.
+    const vandaag = vandaagNl();
+    const geld = await laadGeld(supabase, user.id, vandaag);
+    if (geld.beschikbaar && geld.instellingen.mes_mag_lezen) {
+      const jaarNu = Number(vandaag.slice(0, 4));
+      const auto = await inkomenUitAdministratie(supabase, user.id, profile.rechtsvorm, snapshot.winst, dagenVoorbijInJaar(vandaag), jaarNu);
+      const inkomen = geld.instellingen.inkomen_override_maand ?? auto?.perMaand ?? 0;
+      geldContext = "\n" + geldContextVoorMes(inkomen, geld.posten, geld.doelen);
+    }
+  }
 
   const context = buildMesContext({
     bedrijfsnaam: profile.bedrijfsnaam,
@@ -137,7 +149,7 @@ export async function POST(request: NextRequest) {
         const messageStream = anthropic.messages.stream({
           model: CLAUDE_MODEL,
           max_tokens: 8192,
-          system: MES_CHAT_SYSTEM_PROMPT.replace("{{CONTEXT}}", context),
+          system: MES_CHAT_SYSTEM_PROMPT.replace("{{CONTEXT}}", () => context + geldContext),
           messages: history.map((m) => ({ role: m.role, content: m.content })),
         });
 

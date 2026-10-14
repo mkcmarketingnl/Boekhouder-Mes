@@ -19,7 +19,11 @@ import {
   groupMonthlyTrend,
   type PeriodType,
 } from "@/lib/finance";
-import { estimateIncomeTax } from "@/lib/tax";
+import { schatBelasting } from "@/lib/belastingDb";
+import { laadTransacties } from "@/lib/transactionsDb";
+import { laadMeldingen } from "@/lib/deadlinesDb";
+import { MeldingenBalk } from "@/components/dashboard/MeldingenBalk";
+import { vandaagNl } from "@/lib/facturen";
 import { formatDateInput } from "@/lib/format";
 import type { Profile, Transaction } from "@/lib/types";
 import type { TransactionWithDoc } from "@/components/dashboard/TransactionDetailModal";
@@ -62,13 +66,8 @@ export default async function DashboardPage({
     { data: pagedTransactions, count },
     { data: yearTransactions },
   ] = await Promise.all([
-    supabase
-      .from("transactions")
-      .select("*")
-      .eq("user_id", user!.id)
-      .gte("factuurdatum", formatDateInput(start))
-      .lte("factuurdatum", formatDateInput(end)),
-    supabase.from("transactions").select("*").eq("user_id", user!.id).gte("factuurdatum", formatDateInput(trendStart)),
+    laadTransacties(supabase, user!.id, { van: formatDateInput(start), tot: formatDateInput(end) }).then((data) => ({ data })),
+    laadTransacties(supabase, user!.id, { van: formatDateInput(trendStart) }).then((data) => ({ data })),
     supabase
       .from("transactions")
       .select("*, documents(file_url)", { count: "exact" })
@@ -77,12 +76,7 @@ export default async function DashboardPage({
       .lte("factuurdatum", formatDateInput(end))
       .order("factuurdatum", { ascending: false })
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
-    supabase
-      .from("transactions")
-      .select("*")
-      .eq("user_id", user!.id)
-      .gte("factuurdatum", formatDateInput(yearStart))
-      .lte("factuurdatum", formatDateInput(yearEnd)),
+    laadTransacties(supabase, user!.id, { van: formatDateInput(yearStart), tot: formatDateInput(yearEnd) }).then((data) => ({ data })),
   ]);
 
   const snapshot = aggregateTransactions((periodTransactions ?? []) as Transaction[]);
@@ -91,7 +85,8 @@ export default async function DashboardPage({
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
 
   const yearSnapshot = aggregateTransactions((yearTransactions ?? []) as Transaction[]);
-  const taxEstimate = estimateIncomeTax(profile.rechtsvorm, yearSnapshot.winst);
+  const meldingen = await laadMeldingen(supabase, user!.id, profile.aangiftetijdvak, vandaagNl());
+  const taxEstimate = await schatBelasting(supabase, user!.id, profile.rechtsvorm, yearSnapshot.winst, new Date().getFullYear());
 
   function buildDashboardHref(overrides: { periode?: string; ref?: string; pagina?: number }) {
     const params = new URLSearchParams();
@@ -112,6 +107,8 @@ export default async function DashboardPage({
         </div>
         <UploadFlow userId={user!.id} defaultBtwPercentage={profile.standaard_btw_percentage} />
       </div>
+
+      <MeldingenBalk meldingen={meldingen} />
 
       <p className="rounded-md border border-line bg-paper-dark px-3.5 py-2.5 text-[12.5px] leading-relaxed text-muted">
         {DASHBOARD_DISCLAIMER}

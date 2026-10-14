@@ -283,6 +283,8 @@ export interface InvoiceSettings {
   standaard_template: FactuurTemplate;
   standaard_notitie: string | null;
   kor: boolean;
+  // Alleen aanwezig als migratie 0008 is uitgevoerd
+  standaard_uurtarief?: number | null;
 }
 
 export interface AiControle {
@@ -321,6 +323,9 @@ export interface SalesInvoice {
   // Eerdere inhoud van de factuur, één momentopname per wijziging nadat hij definitief was (controlespoor).
   eerdere_versies?: FactuurVersie[] | null;
   gewijzigd_op?: string | null;
+  // Alleen aanwezig als migratie 0008 is uitgevoerd
+  betaald_op?: string | null;
+  laatste_herinnering_op?: string | null;
   created_at: string;
 }
 

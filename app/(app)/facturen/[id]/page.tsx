@@ -9,6 +9,8 @@ import { MigratieNotice } from "@/components/facturen/MigratieNotice";
 import { laadFactuurContext } from "@/lib/facturenContext";
 import { laadKlanten } from "@/lib/klantenDb";
 import { formatDate } from "@/lib/format";
+import { BetalingPaneel } from "@/components/facturen/BetalingPaneel";
+import { betaalStatus, dagenTeLaat, herinneringTekst } from "@/lib/betaling";
 import { bouwAfzender, formatFactuurnummer, vandaagNl, type FactuurGegevens, type SalesInvoice } from "@/lib/facturen";
 
 export default async function FactuurPage({ params }: { params: Promise<{ id: string }> }) {
@@ -86,6 +88,32 @@ export default async function FactuurPage({ params }: { params: Promise<{ id: st
         </p>
       </div>
       <FactuurDocument gegevens={gegevens} afzender={afzender} template={factuur.template} />
+      <BetalingPaneel
+        id={factuur.id}
+        status={betaalStatus(factuur, vandaagNl())}
+        dagenTeLaat={dagenTeLaat(factuur, vandaagNl())}
+        vervaldatum={factuur.vervaldatum}
+        betaaldOp={factuur.betaald_op ?? null}
+        laatsteHerinneringOp={factuur.laatste_herinnering_op ?? null}
+        vandaag={vandaagNl()}
+        herinnering={
+          betaalStatus(factuur, vandaagNl()) === "te_laat"
+            ? herinneringTekst(
+                {
+                  klant_naam: factuur.klant_naam,
+                  factuurnummer: factuur.factuurnummer,
+                  factuurdatum: factuur.factuurdatum,
+                  vervaldatum: factuur.vervaldatum,
+                  totaal_incl: Number(factuur.totaal_incl),
+                  bedrijfsnaam: afzender.bedrijfsnaam,
+                  iban: afzender.iban,
+                  eerderHerinnerd: !!factuur.laatste_herinnering_op,
+                },
+                vandaagNl()
+              )
+            : null
+        }
+      />
       <FactuurActies id={factuur.id} geboekt={!!factuur.transaction_id} controle={factuur.ai_controle} />
     </div>
   );

@@ -1,15 +1,8 @@
 import type { Rechtsvorm } from "@/lib/types";
+import { berekenIb, type IbAntwoorden, type IbResultaat } from "@/lib/belasting";
 
-// Tarieven 2026. Puur een indicatie — geen officiële aangifte.
-const ZELFSTANDIGENAFTREK = 1200;
-const MKB_VRIJSTELLING_PERCENTAGE = 0.127;
-
-const BOX1_SCHIJVEN = [
-  { tot: 38883, tarief: 0.3575 },
-  { tot: 78426, tarief: 0.3756 },
-  { tot: Infinity, tarief: 0.495 },
-];
-
+// Indicatie van de belasting over de winst van dit jaar. Voor eenmanszaak en VOF rekent dit met dezelfde
+// berekening als de inkomstenbelasting-modus (lib/belasting.ts); voor een BV met een eenvoudige vennootschapsbelasting.
 const VPB_SCHIJVEN = [
   { tot: 200000, tarief: 0.19 },
   { tot: Infinity, tarief: 0.258 },
@@ -33,9 +26,13 @@ export interface TaxEstimate {
   van_toepassing: boolean;
   bedrag: number;
   toelichting: string;
+  // Alleen voor eenmanszaak/VOF: de volledige berekening
+  details?: IbResultaat;
+  // Heeft de gebruiker de vragen in de inkomstenbelasting-modus beantwoord?
+  persoonlijk?: boolean;
 }
 
-export function estimateIncomeTax(rechtsvorm: Rechtsvorm, winstDitJaar: number): TaxEstimate {
+export function estimateIncomeTax(rechtsvorm: Rechtsvorm, winstDitJaar: number, antwoorden: IbAntwoorden | null = null, jaar: number = new Date().getFullYear()): TaxEstimate {
   if (rechtsvorm === "bv") {
     const vpb = progressief(winstDitJaar, VPB_SCHIJVEN);
     return {
@@ -47,16 +44,21 @@ export function estimateIncomeTax(rechtsvorm: Rechtsvorm, winstDitJaar: number):
   }
 
   if (rechtsvorm === "eenmanszaak" || rechtsvorm === "vof") {
-    const naAftrek = Math.max(0, winstDitJaar - (winstDitJaar > 0 ? ZELFSTANDIGENAFTREK : 0));
-    const naVrijstelling = naAftrek * (1 - MKB_VRIJSTELLING_PERCENTAGE);
-    const ib = progressief(naVrijstelling, BOX1_SCHIJVEN);
+    const aandeel = rechtsvorm === "vof" ? Math.min(100, Math.max(0, antwoorden?.vofAandeel ?? 100)) / 100 : 1;
+    const details = berekenIb({ winst: winstDitJaar * aandeel, antwoorden: antwoorden ?? {}, jaar });
+    const persoonlijk = antwoorden != null && Object.keys(antwoorden).length > 0;
+    const basis =
+      "Inkomstenbelasting (box 1) plus bijdrage Zorgverzekeringswet, na zelfstandigenaftrek, MKB-winstvrijstelling en heffingskortingen.";
     return {
       van_toepassing: true,
-      bedrag: ib,
+      bedrag: details.totaal,
+      details,
+      persoonlijk,
       toelichting:
-        rechtsvorm === "vof"
-          ? "Inkomstenbelasting (box 1), uitgaand van zelfstandigenaftrek en MKB-winstvrijstelling. Bij een VOF wordt de winst meestal verdeeld tussen vennoten — dit bedrag gaat uit van de volledige winst voor jou alleen."
-          : "Inkomstenbelasting (box 1), uitgaand van zelfstandigenaftrek (€1.200) en 12,7% MKB-winstvrijstelling.",
+        basis +
+        (rechtsvorm === "vof" ? ` Gerekend met jouw aandeel in de winst (${Math.round(aandeel * 100)}%).` : "") +
+        (persoonlijk ? "" : " Beantwoord de vragen in de Inkomstenbelasting-modus voor een nauwkeuriger bedrag.") +
+        (details.regelsExact ? "" : " Voor dit jaar zijn de regels nog niet vastgesteld; gerekend met de regels van 2026."),
     };
   }
 

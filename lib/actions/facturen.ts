@@ -67,6 +67,8 @@ export interface InstellingenInvoer {
   standaard_template: FactuurTemplate;
   standaard_notitie: string;
   kor: boolean;
+  // undefined = niet aanraken (kolom bestaat nog niet)
+  standaard_uurtarief?: number | null;
 }
 
 const schoon = (s: string) => (s ?? "").trim() || null;
@@ -95,6 +97,7 @@ export async function bewaarInstellingen(invoer: InstellingenInvoer): Promise<Ac
     standaard_template: invoer.standaard_template,
     standaard_notitie: schoon(invoer.standaard_notitie),
     kor: !!invoer.kor,
+    ...(invoer.standaard_uurtarief !== undefined ? { standaard_uurtarief: invoer.standaard_uurtarief == null ? null : Math.max(0, Number(invoer.standaard_uurtarief) || 0) } : {}),
   });
   if (error) return { fout: dbFout(error, "Opslaan van de instellingen is mislukt.") };
 
@@ -538,4 +541,43 @@ export async function wijzigDefinitief(
   revalidatePath("/relaties");
   revalidatePath("/btw");
   return { fout: null, data: { id } };
+}
+
+// ---------- betaalstatus ----------
+
+const MIGRATIE_BETALING =
+  "Betaalstatus bijhouden heeft een eenmalige database-update nodig (migratie 0008_uren_belasting_geld.sql, en 0006 als je die nog niet draaide, in Supabase).";
+
+function betalingFout(error: { code?: string; message?: string }, standaard: string): string {
+  return /betaald_op|laatste_herinnering_op|kan niet meer worden gewijzigd|does not exist/i.test(error.message ?? "") ? MIGRATIE_BETALING : standaard;
+}
+
+// Zet de factuur op betaald (datum) of weer op onbetaald (null). Alleen voor definitieve facturen.
+export async function markeerBetaald(id: string, datum: string | null): Promise<ActieResultaat> {
+  const { supabase, user, hasAccess } = await context();
+  if (!user || !hasAccess) return { fout: GEEN_TOEGANG };
+  if (datum !== null && !/^\d{4}-\d{2}-\d{2}$/.test(datum)) return { fout: "Vul een geldige datum in." };
+  if (datum !== null && datum > vandaag()) return { fout: "De betaaldatum kan niet in de toekomst liggen." };
+  const { data, error } = await supabase
+    .from("sales_invoices")
+    .update({ betaald_op: datum })
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .eq("status", "definitief")
+    .select("id");
+  if (error) return { fout: betalingFout(error, "Opslaan is mislukt.") };
+  if (!data || data.length === 0) return { fout: "Alleen een definitieve factuur kan als betaald worden gemarkeerd." };
+  revalidatePath("/facturen", "layout");
+  revalidatePath("/dashboard");
+  return { fout: null };
+}
+
+// Onthoudt dat er vandaag een herinnering is gemaakt, zodat de volgende een tweede herinnering wordt.
+export async function legHerinneringVast(id: string): Promise<ActieResultaat> {
+  const { supabase, user, hasAccess } = await context();
+  if (!user || !hasAccess) return { fout: GEEN_TOEGANG };
+  const { error } = await supabase.from("sales_invoices").update({ laatste_herinnering_op: vandaag() }).eq("id", id).eq("user_id", user.id).eq("status", "definitief");
+  if (error) return { fout: betalingFout(error, "Opslaan is mislukt.") };
+  revalidatePath("/facturen", "layout");
+  return { fout: null };
 }

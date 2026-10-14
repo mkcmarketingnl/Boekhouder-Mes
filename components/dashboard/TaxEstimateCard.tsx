@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Landmark } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { formatCurrency } from "@/lib/format";
@@ -15,6 +16,11 @@ export function TaxEstimateCard({ estimate, jaar }: { estimate: TaxEstimate; jaa
         <>
           <div className="mono text-2xl font-semibold text-ink">{formatCurrency(estimate.bedrag)}</div>
           <p className="mt-2 text-[12.5px] leading-relaxed text-muted">{estimate.toelichting}</p>
+          {estimate.details && (
+            <Link href="/belasting" className="mt-2 inline-flex min-h-11 items-center text-[12.5px] font-medium text-ink underline">
+              Bekijk de berekening en bespaartips
+            </Link>
+          )}
         </>
       ) : (
         <p className="text-[13px] text-muted">{estimate.toelichting}</p>

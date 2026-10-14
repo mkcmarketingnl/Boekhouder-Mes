@@ -7,12 +7,13 @@ import { FilePlus2, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
+import { DecimalInput } from "@/components/ui/DecimalInput";
 import { Input, Select } from "@/components/ui/Input";
 import { bewaarKlant, verwijderKlant } from "@/lib/actions/klanten";
 import { LANDEN } from "@/lib/facturen";
 import type { Klant, KlantInvoer } from "@/lib/klantenDb";
 
-const LEEG: KlantInvoer = { naam: "", adres: "", postcode: "", plaats: "", land: "Nederland", btw_nummer: "", kvk: "", email: "" };
+const LEEG_BASIS: KlantInvoer = { naam: "", adres: "", postcode: "", plaats: "", land: "Nederland", btw_nummer: "", kvk: "", email: "" };
 
 const naarInvoer = (k: Klant): KlantInvoer => ({
   naam: k.naam,
@@ -23,9 +24,11 @@ const naarInvoer = (k: Klant): KlantInvoer => ({
   btw_nummer: k.btw_nummer ?? "",
   kvk: k.kvk ?? "",
   email: k.email ?? "",
+  // Alleen als de kolom bestaat (migratie 0008)
+  ...("uurtarief" in k ? { uurtarief: k.uurtarief ?? null } : {}),
 });
 
-function KlantFormulier({ start, id, onKlaar }: { start: KlantInvoer; id?: string; onKlaar: () => void }) {
+function KlantFormulier({ start, id, onKlaar, metTarief }: { start: KlantInvoer; id?: string; onKlaar: () => void; metTarief: boolean }) {
   const router = useRouter();
   const [f, setF] = useState(start);
   const [bezig, setBezig] = useState(false);
@@ -82,6 +85,11 @@ function KlantFormulier({ start, id, onKlaar }: { start: KlantInvoer; id?: strin
       <Field label="E-mailadres (optioneel)">
         <Input type="email" value={f.email} onChange={(e) => zet("email", e.target.value)} autoComplete="off" />
       </Field>
+      {metTarief && (
+        <Field label="Standaard uurtarief excl. BTW (optioneel)" hint="Wordt ingevuld als je uren voor deze klant bijhoudt.">
+          <DecimalInput value={Number(f.uurtarief) || 0} onValueChange={(n) => setF((x) => ({ ...x, uurtarief: n > 0 ? n : null }))} />
+        </Field>
+      )}
       {fout && (
         <p className="mb-3 rounded-md border border-stamp/25 bg-stamp-bg px-3.5 py-2.5 text-[13px]" role="alert">
           {fout}
@@ -99,7 +107,7 @@ function KlantFormulier({ start, id, onKlaar }: { start: KlantInvoer; id?: strin
   );
 }
 
-export function KlantenBeheer({ klanten }: { klanten: Klant[] }) {
+export function KlantenBeheer({ klanten, metTarief = false }: { klanten: Klant[]; metTarief?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState<string | "nieuw" | null>(null);
   const [melding, setMelding] = useState<string | null>(null);
@@ -126,7 +134,7 @@ export function KlantenBeheer({ klanten }: { klanten: Klant[] }) {
       {open === "nieuw" ? (
         <Card className="p-5">
           <h2 className="display text-[15px] font-semibold">Nieuwe klant</h2>
-          <KlantFormulier start={LEEG} onKlaar={() => setOpen(null)} />
+          <KlantFormulier start={metTarief ? { ...LEEG_BASIS, uurtarief: null } : LEEG_BASIS} onKlaar={() => setOpen(null)} metTarief={metTarief} />
         </Card>
       ) : (
         <Button type="button" variant="secondary" onClick={() => setOpen("nieuw")} className="w-full justify-center min-[480px]:w-auto">
@@ -149,6 +157,7 @@ export function KlantenBeheer({ klanten }: { klanten: Klant[] }) {
                     <div className="truncate text-[14px] font-medium">{k.naam}</div>
                     <div className="mt-0.5 text-[12px] text-muted">{[k.adres, [k.postcode, k.plaats].filter(Boolean).join(" ")].filter(Boolean).join(", ") || "Geen adres"}</div>
                     {k.email && <div className="text-[12px] text-muted">{k.email}</div>}
+                    {k.uurtarief ? <div className="text-[12px] text-muted">Uurtarief € {String(k.uurtarief).replace(".", ",")}</div> : null}
                   </div>
                   <div className="flex w-full flex-wrap gap-2 min-[480px]:w-auto">
                     <Link href={`/facturen/nieuw?klant=${k.id}`} className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-ink px-3 text-[13px] font-semibold text-paper hover:opacity-90">
@@ -162,7 +171,7 @@ export function KlantenBeheer({ klanten }: { klanten: Klant[] }) {
                     </button>
                   </div>
                 </div>
-                {open === k.id && <KlantFormulier start={naarInvoer(k)} id={k.id} onKlaar={() => setOpen(null)} />}
+                {open === k.id && <KlantFormulier start={naarInvoer(k)} id={k.id} onKlaar={() => setOpen(null)} metTarief={metTarief} />}
               </Card>
             </li>
           ))}

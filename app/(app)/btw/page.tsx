@@ -3,6 +3,7 @@ import { PeriodSelector } from "@/components/dashboard/PeriodSelector";
 import { PeriodNav } from "@/components/dashboard/PeriodNav";
 import { BtwModus } from "@/components/btw/BtwModus";
 import { aggregateTransactions, getPeriodBounds, type PeriodType } from "@/lib/finance";
+import { laadTransacties } from "@/lib/transactionsDb";
 import { berekenAangifte, uiterlijkeDatum, type AangifteTransactie } from "@/lib/btwAangifte";
 import { formatDateInput } from "@/lib/format";
 import type { Profile, Transaction } from "@/lib/types";
@@ -24,15 +25,7 @@ export default async function BtwPage({ searchParams }: { searchParams: Promise<
   const reference = ref && !isNaN(Date.parse(ref)) ? new Date(ref) : new Date();
   const { start, end, label } = getPeriodBounds(periodType, reference);
 
-  const { data } = await supabase
-    .from("transactions")
-    .select("*")
-    .eq("user_id", user!.id)
-    .gte("factuurdatum", formatDateInput(start))
-    .lte("factuurdatum", formatDateInput(end))
-    .order("factuurdatum", { ascending: true });
-
-  const transacties = (data ?? []) as Transaction[];
+  const transacties = (await laadTransacties<Transaction>(supabase, user!.id, { van: formatDateInput(start), tot: formatDateInput(end) })).reverse();
   const aangifte = berekenAangifte(transacties as unknown as AangifteTransactie[]);
 
   // Vangnet: het eindbedrag hier en het BTW-saldo op het dashboard komen uit dezelfde regels en horen

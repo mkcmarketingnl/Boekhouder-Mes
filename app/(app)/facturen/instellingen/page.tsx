@@ -35,6 +35,7 @@ export default async function InstellingenPage({ searchParams }: { searchParams:
     standaard_template: settings?.standaard_template ?? "klassiek",
     standaard_notitie: settings?.standaard_notitie ?? "",
     kor: settings?.kor ?? false,
+    ...(settings && "standaard_uurtarief" in settings ? { standaard_uurtarief: settings.standaard_uurtarief ?? null } : {}),
   };
 
   return (

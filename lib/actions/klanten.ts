@@ -6,6 +6,7 @@ import { getAccessStatus } from "@/lib/subscription";
 import { isTabelOntbreekt } from "@/lib/facturen";
 import { klantRij, type KlantInvoer } from "@/lib/klantenDb";
 
+const MIGRATIE_TARIEF = "Een standaard uurtarief opslaan heeft een eenmalige database-update nodig (migratie 0008_uren_belasting_geld.sql in Supabase).";
 const MIGRATIE_KLANTEN = "Het bewaren van klanten heeft een eenmalige database-update nodig (migratie 0007_klanten.sql in Supabase).";
 
 async function context() {
@@ -26,13 +27,13 @@ export async function bewaarKlant(invoer: KlantInvoer, id?: string): Promise<{ f
 
   if (id) {
     const { data, error } = await ctx.supabase.from("invoice_customers").update(rij).eq("id", id).eq("user_id", ctx.user.id).select("id");
-    if (error) return { fout: isTabelOntbreekt(error) ? MIGRATIE_KLANTEN : error.code === "23505" ? "Je hebt al een klant met deze naam." : "Opslaan is mislukt." };
+    if (error) return { fout: /uurtarief/i.test(error.message) ? MIGRATIE_TARIEF : isTabelOntbreekt(error) ? MIGRATIE_KLANTEN : error.code === "23505" ? "Je hebt al een klant met deze naam." : "Opslaan is mislukt." };
     if (!data || data.length === 0) return { fout: "Klant niet gevonden." };
     revalidatePath("/facturen", "layout");
     return { fout: null, id };
   }
   const { data, error } = await ctx.supabase.from("invoice_customers").insert({ ...rij, user_id: ctx.user.id }).select("id").single();
-  if (error || !data) return { fout: isTabelOntbreekt(error) ? MIGRATIE_KLANTEN : error?.code === "23505" ? "Je hebt al een klant met deze naam." : "Opslaan is mislukt." };
+  if (error || !data) return { fout: error && /uurtarief/i.test(error.message) ? MIGRATIE_TARIEF : isTabelOntbreekt(error) ? MIGRATIE_KLANTEN : error?.code === "23505" ? "Je hebt al een klant met deze naam." : "Opslaan is mislukt." };
   revalidatePath("/facturen", "layout");
   return { fout: null, id: data.id };
 }
