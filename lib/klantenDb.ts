@@ -50,7 +50,7 @@ export function klantRij(i: KlantInvoer) {
 // `beschikbaar` is onwaar zolang migratie 0007 niet is uitgevoerd; de factuurmaker werkt dan gewoon zonder klantenlijst.
 export async function laadKlanten(supabase: SupabaseClient, userId: string): Promise<{ beschikbaar: boolean; klanten: Klant[]; metTarief: boolean }> {
   let { data, error } = await supabase.from("invoice_customers").select(KOLOMMEN_MET_TARIEF as "*").eq("user_id", userId).order("naam", { ascending: true });
-  let metTarief = !error;
+  const metTarief = !error;
   if (error && /uurtarief/i.test(error.message)) {
     // migratie 0008 nog niet uitgevoerd: zonder uurtarief verder
     ({ data, error } = await supabase.from("invoice_customers").select(KOLOMMEN as "*").eq("user_id", userId).order("naam", { ascending: true }));
