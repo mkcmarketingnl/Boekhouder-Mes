@@ -65,6 +65,8 @@ export interface MeldingInvoer {
   uren: { gewerktUren: number; prognoseUren: number; opKoers: boolean } | null;
   // Factureerbare uren die al langer dan twee weken niet gefactureerd zijn
   oudeOpenUren: number;
+  // Openstaande verplichtingen met een deadline uit Money mode (alleen nog niet betaalde)
+  verplichtingen?: { id: string; naam: string; bedrag: number; deadline: string }[];
 }
 
 const eur = (n: number) => "€ " + n.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -107,6 +109,22 @@ export function berekenMeldingen(i: MeldingInvoer): Melding[] {
     if (dagen >= 60) {
       uit.push({ id: `urencriterium-${jaar}`, ernst: "let_op", tekst: `Op dit tempo haal je het urencriterium (1.225 uur) niet: je komt op ongeveer ${Math.round(i.uren.prognoseUren).toLocaleString("nl-NL")} uur. Dan vervalt je zelfstandigenaftrek.`, href: "/uren" });
     }
+  }
+
+  // Verplichtingen met een deadline: een melding op 14, 7, 3 en 1 dag ervoor en op de dag zelf. Daarna elke dag opnieuw
+  // (de sleutel bevat dan de datum) tot je de verplichting als betaald markeert.
+  for (const v of i.verplichtingen ?? []) {
+    const dagen = dagenTot(i.vandaag, v.deadline);
+    if (dagen > 14) continue;
+    const mijlpaal = dagen < 0 ? `laat-${i.vandaag}` : dagen === 0 ? "0" : dagen <= 1 ? "1" : dagen <= 3 ? "3" : dagen <= 7 ? "7" : "14";
+    const wat = `${v.naam} (${eur(v.bedrag)})`;
+    const tekst =
+      dagen < 0
+        ? `${wat} had uiterlijk ${lang(v.deadline)} betaald moeten zijn: ${-dagen} ${-dagen === 1 ? "dag" : "dagen"} te laat. Betaal het zo snel mogelijk of neem contact op om een betalingsregeling te treffen.`
+        : dagen === 0
+          ? `Vandaag is de deadline voor ${wat}.`
+          : `${wat}: deadline ${lang(v.deadline)}, nog ${dagen} ${dagen === 1 ? "dag" : "dagen"}.`;
+    uit.push({ id: `verplichting-${v.id}-${mijlpaal}`, ernst: dagen < 0 ? "te_laat" : dagen <= 7 ? "let_op" : "info", tekst, href: "/geld" });
   }
 
   const volgorde = { te_laat: 0, let_op: 1, info: 2 } as const;

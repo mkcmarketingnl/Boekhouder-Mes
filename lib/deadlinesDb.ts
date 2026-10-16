@@ -15,7 +15,7 @@ export async function laadMeldingen(supabase: SupabaseClient, userId: string, ti
   const jaar = Number(vandaag.slice(0, 4));
   const t = laatsteBtwTijdvak(tijdvak, vandaag);
 
-  const [btw, facturen, uren, oudeUren] = await Promise.all([
+  const [btw, facturen, uren, oudeUren, verpl] = await Promise.all([
     supabase.from("transactions").select("id", { count: "exact", head: true }).eq("user_id", userId).gte("factuurdatum", t.begin).lte("factuurdatum", t.einde),
     (async () => {
       const metBetaling = await supabase.from("sales_invoices").select("status, vervaldatum, totaal_incl, betaald_op").eq("user_id", userId).eq("status", "definitief");
@@ -23,6 +23,8 @@ export async function laadMeldingen(supabase: SupabaseClient, userId: string, ti
     })(),
     laadJaarMinuten(supabase, userId, jaar),
     supabase.from("time_entries").select("minuten").eq("user_id", userId).eq("factureerbaar", true).is("invoice_id", null).lte("datum", minDagen(vandaag, 14)).limit(1000),
+    // Nog niet betaalde verplichtingen waarvan de deadline binnen 14 dagen valt of al voorbij is
+    supabase.from("geld_verplichtingen").select("id, naam, bedrag, deadline").eq("user_id", userId).is("betaald_op", null).lte("deadline", minDagen(vandaag, -14)).limit(200),
   ]);
 
   const open = openstaand((facturen ?? []).map((f) => ({ status: f.status, vervaldatum: f.vervaldatum, totaal_incl: Number(f.totaal_incl), betaald_op: f.betaald_op })), vandaag);
@@ -37,5 +39,6 @@ export async function laadMeldingen(supabase: SupabaseClient, userId: string, ti
     teLaatBedrag: open.bedragTeLaat,
     uren: stand ? { gewerktUren: stand.gewerktUren, prognoseUren: stand.prognoseUren, opKoers: stand.opKoers } : null,
     oudeOpenUren: oudeMinuten / 60,
+    verplichtingen: verpl.error ? [] : (verpl.data ?? []).map((v) => ({ id: v.id as string, naam: v.naam as string, bedrag: Number(v.bedrag), deadline: v.deadline as string })),
   });
 }

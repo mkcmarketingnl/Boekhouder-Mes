@@ -3,7 +3,7 @@ import { laadTransacties } from "@/lib/transactionsDb";
 import { Card } from "@/components/ui/Card";
 import { GeldBeheer } from "@/components/geld/GeldBeheer";
 import { aggregateTransactions, getPeriodBounds } from "@/lib/finance";
-import { laadGeld } from "@/lib/geldDb";
+import { laadGeld, laadVerplichtingen } from "@/lib/geldDb";
 import { dagenVoorbijInJaar, inkomenUitAdministratie } from "@/lib/geldInkomen";
 import { vandaagNl } from "@/lib/facturen";
 import { formatDateInput } from "@/lib/format";
@@ -43,6 +43,7 @@ export default async function GeldPage() {
   const { start, end } = getPeriodBounds("jaar");
   const transacties = await laadTransacties<Transaction>(supabase, user!.id, { van: formatDateInput(start), tot: formatDateInput(end) });
   const winst = aggregateTransactions(transacties).winst;
+  const verpl = await laadVerplichtingen(supabase, user!.id);
   const auto = await inkomenUitAdministratie(supabase, user!.id, profile.rechtsvorm, winst, dagenVoorbijInJaar(vandaag), jaar);
 
   const autoUitleg = auto
@@ -62,6 +63,8 @@ export default async function GeldPage() {
         posten={gegevens.posten}
         uitgaven={gegevens.uitgaven}
         doelen={gegevens.doelen}
+        verplichtingen={verpl.verplichtingen}
+        verplichtingenBeschikbaar={verpl.beschikbaar}
       />
     </div>
   );

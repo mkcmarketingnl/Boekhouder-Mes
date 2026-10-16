@@ -253,3 +253,67 @@ export function doelPlannen(doelen: GeldDoel[], voorDoelen: number, vandaag: str
   // Doelen zonder bedrag ("overzicht") hebben geen berekening
   return doelen.map((d) => per.get(d.id) ?? { doel: d, resterend: 0, procent: 0, maandenTotDatum: null, nodigPerMaand: null, status: "overzicht" as DoelStatus, haalbaarOp: null, maandenBijRuimte: null });
 }
+
+// ---------- verplichtingen met een deadline ----------
+
+export interface GeldVerplichting {
+  id: string;
+  naam: string;
+  bedrag: number;
+  deadline: string;
+  instantie: string | null;
+  notitie: string | null;
+  betaald_op: string | null;
+}
+
+export type VerplichtingStatus = "betaald" | "te_laat" | "vandaag" | "binnenkort" | "later";
+
+export function dagenTot(van: string, tot: string): number {
+  const [j1, m1, d1] = van.split("-").map(Number);
+  const [j2, m2, d2] = tot.split("-").map(Number);
+  return Math.round((Date.UTC(j2, m2 - 1, d2) - Date.UTC(j1, m1 - 1, d1)) / 86400000);
+}
+
+// dagen = aantal dagen tot de deadline (negatief als die voorbij is). "Binnenkort" = binnen 14 dagen.
+export function verplichtingStatus(v: Pick<GeldVerplichting, "deadline" | "betaald_op">, vandaag: string): { status: VerplichtingStatus; dagen: number } {
+  const dagen = dagenTot(vandaag, v.deadline);
+  if (v.betaald_op) return { status: "betaald", dagen };
+  if (dagen < 0) return { status: "te_laat", dagen };
+  if (dagen === 0) return { status: "vandaag", dagen };
+  return { status: dagen <= 14 ? "binnenkort" : "later", dagen };
+}
+
+export interface VerplichtingenSamenvatting {
+  aantalOpen: number;
+  totaalOpen: number;
+  // Wat je de komende 30 dagen moet betalen, inclusief wat al te laat is
+  binnen30Dagen: number;
+  aantalTeLaat: number;
+  bedragTeLaat: number;
+}
+
+export function verplichtingenSamenvatting(vs: GeldVerplichting[], vandaag: string): VerplichtingenSamenvatting {
+  let aantalOpen = 0, totaal = 0, binnen30 = 0, aantalTeLaat = 0, teLaat = 0;
+  for (const v of vs) {
+    const { status, dagen } = verplichtingStatus(v, vandaag);
+    if (status === "betaald") continue;
+    const c = naarCent(v.bedrag);
+    aantalOpen += 1;
+    totaal += c;
+    if (dagen <= 30) binnen30 += c;
+    if (status === "te_laat") {
+      aantalTeLaat += 1;
+      teLaat += c;
+    }
+  }
+  return { aantalOpen, totaalOpen: naarEuro(totaal), binnen30Dagen: naarEuro(binnen30), aantalTeLaat, bedragTeLaat: naarEuro(teLaat) };
+}
+
+// Open verplichtingen eerst, op deadline (de dichtstbijzijnde bovenaan); betaalde daarna, de laatst betaalde eerst.
+export function sorteerVerplichtingen(vs: GeldVerplichting[]): GeldVerplichting[] {
+  return [...vs].sort((a, b) => {
+    if (!!a.betaald_op !== !!b.betaald_op) return a.betaald_op ? 1 : -1;
+    if (a.betaald_op && b.betaald_op) return a.betaald_op < b.betaald_op ? 1 : a.betaald_op > b.betaald_op ? -1 : 0;
+    return a.deadline < b.deadline ? -1 : a.deadline > b.deadline ? 1 : 0;
+  });
+}

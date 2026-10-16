@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { berekenIb } from "@/lib/belasting";
 import { laadIbAntwoorden } from "@/lib/belastingDb";
-import { inkomenUitBoekhouding, maandOverzicht, type GeldDoel, type GeldPost } from "@/lib/geld";
+import { inkomenUitBoekhouding, maandOverzicht, type GeldDoel, type GeldPost, type GeldVerplichting } from "@/lib/geld";
 import type { Rechtsvorm } from "@/lib/types";
 
 export interface GeldInkomen {
@@ -26,7 +26,7 @@ export function dagenVoorbijInJaar(vandaag: string): number {
 }
 
 // Korte tekst voor Mes, alleen als de gebruiker dat heeft aangezet. Geen uitgavenlijst, alleen de samenvatting.
-export function geldContextVoorMes(inkomen: number, posten: GeldPost[], doelen: GeldDoel[]): string {
+export function geldContextVoorMes(inkomen: number, posten: GeldPost[], doelen: GeldDoel[], verplichtingen: GeldVerplichting[] = []): string {
   const o = maandOverzicht(inkomen, posten);
   const eur = (n: number) => `€ ${n.toLocaleString("nl-NL", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   const lijst = (soort: GeldPost["soort"]) =>
@@ -39,6 +39,8 @@ export function geldContextVoorMes(inkomen: number, posten: GeldPost[], doelen: 
   ];
   const d = doelen.filter((x) => x.soort !== "overzicht" && (x.doel_bedrag ?? 0) > 0);
   if (d.length > 0) regels.push(`- Financiële doelen: ${d.map((x) => `${x.naam} (${eur(x.huidig_bedrag)} van ${eur(x.doel_bedrag ?? 0)}${x.streefdatum ? `, streefdatum ${x.streefdatum}` : ""})`).join("; ")}.`);
+  const open = verplichtingen.filter((v) => !v.betaald_op);
+  if (open.length > 0) regels.push(`- Openstaande verplichtingen met een deadline: ${open.map((v) => `${v.naam} ${eur(v.bedrag)} uiterlijk ${v.deadline}${v.instantie ? ` (${v.instantie})` : ""}`).join("; ")}.`);
   const overzicht = doelen.filter((x) => x.soort === "overzicht").map((x) => x.naam);
   if (overzicht.length > 0) regels.push(`- Wil meer grip op geld: ${overzicht.join("; ")}.`);
   regels.push("- Behandel deze gegevens vertrouwelijk, oordeel niet over keuzes zoals casino of uit eten, en geef geen beleggingsadvies.");

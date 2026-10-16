@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isTabelOntbreekt } from "@/lib/facturen";
-import { plusMaanden, type GeldDoel, type GeldPost, type GeldUitgave } from "@/lib/geld";
+import { plusMaanden, type GeldDoel, type GeldPost, type GeldUitgave, type GeldVerplichting } from "@/lib/geld";
 
 export interface GeldInstellingen {
   inkomen_override_maand: number | null;
@@ -45,5 +45,18 @@ export async function laadGeld(supabase: SupabaseClient, userId: string, vandaag
     posten: (posten.data ?? []).map((p) => ({ id: p.id, soort: p.soort, naam: p.naam, bedrag_maand: Number(p.bedrag_maand), restschuld: num(p.restschuld), rente_percentage: num(p.rente_percentage), einddatum: p.einddatum ?? null })),
     uitgaven: (uitgaven.data ?? []).map((u) => ({ id: u.id, post_id: u.post_id, datum: u.datum, bedrag: Number(u.bedrag), notitie: u.notitie ?? null })),
     doelen: (doelen.data ?? []).map((d) => ({ id: d.id, naam: d.naam, soort: d.soort, doel_bedrag: num(d.doel_bedrag), huidig_bedrag: Number(d.huidig_bedrag), streefdatum: d.streefdatum ?? null })),
+  };
+}
+
+// Verplichtingen met een deadline staan in een eigen tabel (migratie 0009), zodat de rest van Money mode ook zonder werkt.
+export async function laadVerplichtingen(supabase: SupabaseClient, userId: string): Promise<{ beschikbaar: boolean; verplichtingen: GeldVerplichting[] }> {
+  const { data, error } = await supabase.from("geld_verplichtingen").select("id, naam, bedrag, deadline, instantie, notitie, betaald_op").eq("user_id", userId).order("deadline", { ascending: true }).limit(500);
+  if (error) {
+    if (!isTabelOntbreekt(error)) console.error("Verplichtingen laden mislukt:", error.message);
+    return { beschikbaar: false, verplichtingen: [] };
+  }
+  return {
+    beschikbaar: true,
+    verplichtingen: (data ?? []).map((v) => ({ id: v.id, naam: v.naam, bedrag: Number(v.bedrag), deadline: v.deadline, instantie: v.instantie ?? null, notitie: v.notitie ?? null, betaald_op: v.betaald_op ?? null })),
   };
 }

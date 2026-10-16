@@ -17,8 +17,9 @@ import {
   verwijderUitgave,
   voegUitgaveToe,
 } from "@/lib/actions/geld";
-import { aflossingPlan, doelPlannen, maandOverzicht, schuldenSamenvatting, speelruimteStand, structureelBoven, type DoelPlan, type GeldDoel, type GeldPost, type PostSoort } from "@/lib/geld";
+import { aflossingPlan, doelPlannen, type GeldVerplichting, maandOverzicht, schuldenSamenvatting, speelruimteStand, structureelBoven, type DoelPlan, type GeldDoel, type GeldPost, type PostSoort } from "@/lib/geld";
 import type { GeldInstellingen, UitgaveRij } from "@/lib/geldDb";
+import { VerplichtingenSectie } from "@/components/geld/VerplichtingenSectie";
 import { formatCurrency, formatDate } from "@/lib/format";
 
 interface Props {
@@ -29,6 +30,8 @@ interface Props {
   posten: GeldPost[];
   uitgaven: UitgaveRij[];
   doelen: GeldDoel[];
+  verplichtingen: GeldVerplichting[];
+  verplichtingenBeschikbaar: boolean;
 }
 
 const e = (n: number) => formatCurrency(n);
@@ -480,7 +483,7 @@ function DoelenSectie({ doelen, voorDoelen, vandaag }: { doelen: GeldDoel[]; voo
 
 // ---------- hoofdcomponent ----------
 
-export function GeldBeheer({ vandaag, inkomenAuto, autoUitleg, instellingen, posten, uitgaven, doelen }: Props) {
+export function GeldBeheer({ vandaag, inkomenAuto, autoUitleg, instellingen, posten, uitgaven, doelen, verplichtingen, verplichtingenBeschikbaar }: Props) {
   const router = useRouter();
   const [bewerkInkomen, setBewerkInkomen] = useState(false);
   const [eigen, setEigen] = useState(instellingen.inkomen_override_maand ?? inkomenAuto?.perMaand ?? 0);
@@ -607,6 +610,8 @@ export function GeldBeheer({ vandaag, inkomenAuto, autoUitleg, instellingen, pos
         </div>
       </Card>
 
+      <VerplichtingenSectie verplichtingen={verplichtingen} beschikbaar={verplichtingenBeschikbaar} vandaag={vandaag} voorDoelen={o.voorDoelen} />
+
       <PostenSectie soort="vaste_last" posten={posten} vandaag={vandaag} />
 
       <div>
@@ -638,7 +643,7 @@ export function GeldBeheer({ vandaag, inkomenAuto, autoUitleg, instellingen, pos
         <h2 className="display mb-2 flex items-center gap-2 text-[15px] font-semibold">
           <Lock size={15} /> Privacy
         </h2>
-        <p className="text-[12.5px] leading-relaxed text-muted">Alles op deze pagina is alleen voor jou zichtbaar. Het zit niet in je jaaroverzicht of exports en wordt nergens anders in de app getoond.</p>
+        <p className="text-[12.5px] leading-relaxed text-muted">Alles op deze pagina is alleen voor jou zichtbaar. Het zit niet in je jaaroverzicht of exports. Een uitzondering zijn de deadline-meldingen voor je verplichtingen: die zie je op je overzicht, met naam en bedrag.</p>
         <label className="mt-3 flex min-h-11 cursor-pointer items-start gap-2.5 text-[13px]">
           <input
             type="checkbox"

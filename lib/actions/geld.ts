@@ -170,3 +170,69 @@ export async function bewaarGeldInstellingen(invoer: { inkomen_override_maand: n
   opgeslagen();
   return { fout: null };
 }
+
+// ---------- verplichtingen met een deadline ----------
+
+const MIGRATIE_VERPLICHTINGEN = "Verplichtingen met een deadline hebben een eenmalige database-update nodig (migratie 0009_geld_verplichtingen.sql in Supabase).";
+const verplFout = (error: { code?: string; message?: string } | null, standaard: string) => (isTabelOntbreekt(error) ? MIGRATIE_VERPLICHTINGEN : standaard);
+const isJaar = (d: string) => Number(d.slice(0, 4)) >= 2000 && Number(d.slice(0, 4)) <= 2100;
+
+export interface VerplichtingInvoer {
+  naam: string;
+  bedrag: number;
+  deadline: string;
+  instantie?: string;
+  notitie?: string;
+}
+
+export async function bewaarVerplichting(invoer: VerplichtingInvoer, id?: string): Promise<{ fout: string | null }> {
+  const ctx = await context();
+  if (!ctx) return GEEN_TOEGANG;
+  const naam = (invoer.naam ?? "").trim().slice(0, 80);
+  if (!naam) return { fout: "Geef het een naam, bijvoorbeeld wat het is of van wie." };
+  const b = bedrag(invoer.bedrag, 0.01);
+  if (b === null) return { fout: "Vul het bedrag in dat je nog moet betalen." };
+  if (!isDatum(invoer.deadline) || !isJaar(invoer.deadline)) return { fout: "Vul een geldige deadline in." };
+
+  const rij = {
+    naam,
+    bedrag: b,
+    deadline: invoer.deadline,
+    instantie: (invoer.instantie ?? "").trim().slice(0, 80) || null,
+    notitie: (invoer.notitie ?? "").trim().slice(0, 300) || null,
+  };
+  if (id) {
+    const { data, error } = await ctx.supabase.from("geld_verplichtingen").update(rij).eq("id", id).eq("user_id", ctx.user.id).select("id");
+    if (error) return { fout: verplFout(error, "Opslaan is mislukt.") };
+    if (!data || data.length === 0) return { fout: "Niet gevonden." };
+  } else {
+    const { error } = await ctx.supabase.from("geld_verplichtingen").insert({ ...rij, user_id: ctx.user.id });
+    if (error) return { fout: verplFout(error, "Opslaan is mislukt.") };
+  }
+  revalidatePath("/geld");
+  revalidatePath("/dashboard");
+  return { fout: null };
+}
+
+export async function verwijderVerplichting(id: string): Promise<{ fout: string | null }> {
+  const ctx = await context();
+  if (!ctx) return GEEN_TOEGANG;
+  const { error } = await ctx.supabase.from("geld_verplichtingen").delete().eq("id", id).eq("user_id", ctx.user.id);
+  if (error) return { fout: verplFout(error, "Verwijderen is mislukt.") };
+  revalidatePath("/geld");
+  revalidatePath("/dashboard");
+  return { fout: null };
+}
+
+// Zet een verplichting op betaald (datum) of weer open (null). Betaald stopt de herinneringen.
+export async function markeerVerplichtingBetaald(id: string, datum: string | null): Promise<{ fout: string | null }> {
+  const ctx = await context();
+  if (!ctx) return GEEN_TOEGANG;
+  if (datum !== null && (!isDatum(datum) || !isJaar(datum))) return { fout: "Vul een geldige datum in." };
+  const { data, error } = await ctx.supabase.from("geld_verplichtingen").update({ betaald_op: datum }).eq("id", id).eq("user_id", ctx.user.id).select("id");
+  if (error) return { fout: verplFout(error, "Opslaan is mislukt.") };
+  if (!data || data.length === 0) return { fout: "Niet gevonden." };
+  revalidatePath("/geld");
+  revalidatePath("/dashboard");
+  return { fout: null };
+}

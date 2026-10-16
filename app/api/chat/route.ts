@@ -6,7 +6,7 @@ import { MES_CHAT_SYSTEM_PROMPT, buildMesContext } from "@/lib/anthropic/prompts
 import { aggregateTransactions, getPeriodBounds } from "@/lib/finance";
 import { schatBelasting } from "@/lib/belastingDb";
 import { laadTransacties } from "@/lib/transactionsDb";
-import { laadGeld } from "@/lib/geldDb";
+import { laadGeld, laadVerplichtingen } from "@/lib/geldDb";
 import { dagenVoorbijInJaar, geldContextVoorMes, inkomenUitAdministratie } from "@/lib/geldInkomen";
 import { vandaagNl } from "@/lib/facturen";
 import { formatDateInput } from "@/lib/format";
@@ -118,7 +118,8 @@ export async function POST(request: NextRequest) {
       const jaarNu = Number(vandaag.slice(0, 4));
       const auto = await inkomenUitAdministratie(supabase, user.id, profile.rechtsvorm, snapshot.winst, dagenVoorbijInJaar(vandaag), jaarNu);
       const inkomen = geld.instellingen.inkomen_override_maand ?? auto?.perMaand ?? 0;
-      geldContext = "\n" + geldContextVoorMes(inkomen, geld.posten, geld.doelen);
+      const verpl = await laadVerplichtingen(supabase, user.id);
+      geldContext = "\n" + geldContextVoorMes(inkomen, geld.posten, geld.doelen, verpl.verplichtingen);
     }
   }
 
