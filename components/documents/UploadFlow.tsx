@@ -90,6 +90,8 @@ export function UploadFlow({ userId, defaultBtwPercentage }: { userId: string; d
         // Een bon met meerdere BTW-tarieven (bijv. eten 9% + drank 21%) laten we altijd even door de gebruiker
         // bekijken: de verdeling bepaalt de BTW-aangifte, dus die moet zichtbaar kloppen.
         !(extracted.btw_regels && extracted.btw_regels.length >= 2) &&
+        // Ingehouden kosten (factoring e.d.) veranderen wat er geboekt wordt: die controleert de gebruiker altijd.
+        !(extracted.verrekende_kosten && extracted.verrekende_kosten.length > 0) &&
         !duplicaatVan;
 
       if (autoSaveOk && extracted) {

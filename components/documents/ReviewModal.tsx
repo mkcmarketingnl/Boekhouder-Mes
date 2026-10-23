@@ -9,7 +9,8 @@ import { BedragBtwFields } from "@/components/documents/BedragBtwFields";
 import { bedragenUitWaarde, waardeUitScan } from "@/lib/btwInvoer";
 import { RISK_WARNING_PREFIX, RISK_WARNING_SUFFIX } from "@/components/ui/Disclaimer";
 import { CATEGORIE_OPTIES } from "@/lib/types";
-import { saveTransaction } from "@/lib/transactions";
+import { saveTransaction, saveTransactionMetKosten } from "@/lib/transactions";
+import { VerrekendeKostenFields, kostRegelsUitScan, kostenUitRegels, type KostRegel } from "@/components/documents/VerrekendeKostenFields";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { ExtractedInvoiceData, RisicoNiveau, TransactieType, Transaction } from "@/lib/types";
 
@@ -47,6 +48,10 @@ export function ReviewModal({
   const [categorie, setCategorie] = useState<string>(extracted?.voorgestelde_categorie ?? CATEGORIE_OPTIES[0]);
   const [type, setType] = useState<TransactieType>(extracted?.type ?? "kosten");
   const [bedragBtw, setBedragBtw] = useState(() => waardeUitScan(extracted, defaultBtwPercentage));
+  // Het document noemt een lager eindbedrag dan het factuurbedrag: er worden dan waarschijnlijk kosten ingehouden
+  const lagerEindbedrag = extracted?.eindbedrag != null && extracted?.bedrag_incl_btw != null && extracted.eindbedrag < extracted.bedrag_incl_btw - 0.03;
+  const [kostRegels, setKostRegels] = useState<KostRegel[]>(() => kostRegelsUitScan(extracted?.verrekende_kosten));
+  const [boekKosten, setBoekKosten] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,10 +64,17 @@ export function ReviewModal({
       setError(bedragen.fout ?? "Vul minimaal leverancier, datum en bedrag in.");
       return;
     }
+    // Ingehouden kosten (factoring e.d.): alleen bij omzet, en alleen als je ze wilt boeken
+    const metKosten = type === "omzet" && boekKosten && kostRegels.length > 0;
+    const kostenUitkomst = metKosten ? kostenUitRegels(kostRegels, bedragen.totaalIncl) : { kosten: [], fout: null };
+    if (kostenUitkomst.fout) {
+      setError(kostenUitkomst.fout);
+      return;
+    }
     setSaving(true);
     setError(null);
 
-    const { error: saveError } = await saveTransaction(userId, {
+    const invoer = {
       document_id: documentId,
       factuurnummer: factuurnummer || null,
       factuurdatum,
@@ -75,15 +87,20 @@ export function ReviewModal({
       categorie,
       risico: extracted?.risico ?? "laag",
       risico_toelichting: extracted?.risico_toelichting ?? null,
-      invoerwijze: extracted ? "ai" : "handmatig",
-    });
+      invoerwijze: (extracted ? "ai" : "handmatig") as "ai" | "handmatig",
+    };
+    const { error: saveError } = metKosten ? await saveTransactionMetKosten(userId, invoer, kostenUitkomst.kosten) : await saveTransaction(userId, invoer);
 
     setSaving(false);
     if (saveError) {
       setError(saveError);
       return;
     }
-    onSaved(`${leverancier} opgeslagen — ${type === "omzet" ? "+" : "−"}${formatCurrency(bedragen.totaalIncl)}`);
+    onSaved(
+      metKosten
+        ? `${leverancier} opgeslagen — +${formatCurrency(bedragen.totaalIncl)} omzet en −${formatCurrency(kostenUitkomst.kosten.reduce((a, k) => a + k.bedrag_incl_btw, 0))} ingehouden kosten`
+        : `${leverancier} opgeslagen — ${type === "omzet" ? "+" : "−"}${formatCurrency(bedragen.totaalIncl)}`
+    );
   }
 
   return (
@@ -208,6 +225,20 @@ export function ReviewModal({
         </div>
 
         <BedragBtwFields waarde={bedragBtw} onChange={setBedragBtw} documentTotaal={extracted?.bedrag_incl_btw ?? null} />
+
+        {type === "omzet" && (!!extracted?.verrekende_kosten?.length || kostRegels.length > 0 || lagerEindbedrag) && (
+          <VerrekendeKostenFields regels={kostRegels} onChange={setKostRegels} boeken={boekKosten} onBoeken={setBoekKosten} hoofdTotaal={bedragenUitWaarde(bedragBtw).totaalIncl} eindbedrag={extracted?.eindbedrag} />
+        )}
+
+        {type === "omzet" && !extracted?.verrekende_kosten?.length && kostRegels.length === 0 && !lagerEindbedrag && (
+          <button
+            type="button"
+            onClick={() => setKostRegels([{ omschrijving: "Factoring", partij: null, referentie: null, bedrag: "", percentage: 21 }])}
+            className="mb-4 flex min-h-11 w-full items-center gap-2 rounded-md border border-dashed border-line px-3.5 text-left text-[12.5px] text-muted hover:text-ink"
+          >
+            Worden er kosten van dit factuurbedrag afgehouden, bijvoorbeeld factoring? Voeg ze hier toe.
+          </button>
+        )}
 
         {type === "kosten" && (
           <Field label="Categorie">

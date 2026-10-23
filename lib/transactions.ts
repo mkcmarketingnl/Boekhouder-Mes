@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import { berekenExclBtw, hoofdPercentage, isGemengd, normaliseerRegels, totalenVanRegels, type BtwRegel } from "@/lib/btw";
 import { normalizeSupplierName } from "@/lib/types";
 import type { Invoerwijze, RisicoNiveau, TransactieType, Transaction } from "@/lib/types";
+import type { VerrekendeKost } from "@/lib/verrekend";
 
 export interface SaveTransactionInput {
   document_id: string | null;
@@ -104,11 +105,11 @@ export async function checkDuplicateFactuur(
 export async function saveTransaction(
   userId: string,
   input: SaveTransactionInput
-): Promise<{ error: string | null }> {
+): Promise<{ error: string | null; id?: string }> {
   const supabase = createClient();
   const bedragen = bepaalBedragen(input);
 
-  const { error } = await supabase.from("transactions").insert({
+  const { data: opgeslagen, error } = await supabase.from("transactions").insert({
     document_id: input.document_id,
     user_id: userId,
     factuurnummer: input.factuurnummer,
@@ -126,9 +127,9 @@ export async function saveTransaction(
     risico: input.risico,
     risico_toelichting: input.risico_toelichting,
     invoerwijze: input.invoerwijze,
-  });
+  }).select("id").single();
 
-  if (error) {
+  if (error || !opgeslagen) {
     if (bedragen.regels && isMissendeKolom(error)) return { error: MIGRATIE_NODIG };
     return { error: "Opslaan is mislukt. Probeer het opnieuw." };
   }
@@ -141,6 +142,53 @@ export async function saveTransaction(
     await rememberSupplier(userId, input.leverancier, input.categorie, input.type);
   }
 
+  return { error: null, id: opgeslagen.id };
+}
+
+// De transactie voor een kost die op een verkoopfactuur is ingehouden (factoring e.d.). Hoort bij hetzelfde document.
+export function kostAlsTransactie(
+  kost: VerrekendeKost,
+  hoofd: { document_id: string | null; factuurdatum: string; factuurnummer: string | null; leverancier: string }
+): SaveTransactionInput {
+  const bij = [hoofd.factuurnummer ? `factuur ${hoofd.factuurnummer}` : null, hoofd.leverancier ? `aan ${hoofd.leverancier}` : null].filter(Boolean).join(" ");
+  return {
+    document_id: hoofd.document_id,
+    factuurnummer: kost.referentie,
+    factuurdatum: hoofd.factuurdatum,
+    // een naam als "Factoring 4,8%" zou in je leveranciers elke keer als een andere leverancier verschijnen
+    leverancier: kost.partij || kost.omschrijving.replace(/\s*\(?\d+([.,]\d+)?\s*%\)?/g, "").trim() || "Verrekende kosten",
+    omschrijving: `${kost.omschrijving} — ingehouden op ${bij || "een verkoopfactuur"}`.slice(0, 200),
+    bedrag_incl_btw: kost.bedrag_incl_btw,
+    btw_percentage: kost.btw_percentage,
+    type: "kosten",
+    categorie: "Overig",
+    risico: "laag",
+    risico_toelichting: null,
+    invoerwijze: "ai",
+  };
+}
+
+// Slaat een verkoopfactuur en de daarop ingehouden kosten samen op. Alles of niets: lukt een kostenpost niet,
+// dan halen we wat al was opgeslagen weer weg, zodat de administratie nooit half klopt.
+export async function saveTransactionMetKosten(
+  userId: string,
+  input: SaveTransactionInput,
+  kosten: VerrekendeKost[]
+): Promise<{ error: string | null }> {
+  const hoofd = await saveTransaction(userId, input);
+  if (hoofd.error || !hoofd.id) return { error: hoofd.error ?? "Opslaan is mislukt. Probeer het opnieuw." };
+  const opgeslagen: string[] = [hoofd.id];
+  for (const kost of kosten) {
+    const res = await saveTransaction(
+      userId,
+      kostAlsTransactie(kost, { document_id: input.document_id, factuurdatum: input.factuurdatum, factuurnummer: input.factuurnummer, leverancier: input.leverancier })
+    );
+    if (res.error || !res.id) {
+      for (const id of opgeslagen) await deleteTransaction(id);
+      return { error: "De ingehouden kosten konden niet worden opgeslagen, dus er is niets opgeslagen. Probeer het opnieuw." };
+    }
+    opgeslagen.push(res.id);
+  }
   return { error: null };
 }
 

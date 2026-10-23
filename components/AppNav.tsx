@@ -24,6 +24,7 @@ const GROEPEN: Groep[] = [
       { href: "/belasting", label: "Inkomstenbelasting" },
       { href: "/relaties", label: "Relaties" },
       { href: "/jaaroverzicht", label: "Jaaroverzicht" },
+      { href: "/controle", label: "Controle" },
     ],
   },
   {

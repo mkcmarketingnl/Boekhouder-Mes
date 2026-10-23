@@ -67,6 +67,8 @@ export interface MeldingInvoer {
   oudeOpenUren: number;
   // Openstaande verplichtingen met een deadline uit Money mode (alleen nog niet betaalde)
   verplichtingen?: { id: string; naam: string; bedrag: number; deadline: string }[];
+  // Er zijn gescande documenten die nog nooit met de nieuwste scan zijn gecontroleerd
+  controleAanbevolen?: boolean;
 }
 
 const eur = (n: number) => "€ " + n.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -125,6 +127,10 @@ export function berekenMeldingen(i: MeldingInvoer): Melding[] {
           ? `Vandaag is de deadline voor ${wat}.`
           : `${wat}: deadline ${lang(v.deadline)}, nog ${dagen} ${dagen === 1 ? "dag" : "dagen"}.`;
     uit.push({ id: `verplichting-${v.id}-${mijlpaal}`, ernst: dagen < 0 ? "te_laat" : dagen <= 7 ? "let_op" : "info", tekst, href: "/geld" });
+  }
+
+  if (i.controleAanbevolen) {
+    uit.push({ id: "controle-2026-10", ernst: "let_op", tekst: "Onze scan is slimmer geworden, bijvoorbeeld bij ingehouden kosten zoals factoring. Controleer je eerder geüploade facturen op fouten: dat kost je niets en je hoeft niets opnieuw te uploaden.", href: "/controle" });
   }
 
   const volgorde = { te_laat: 0, let_op: 1, info: 2 } as const;

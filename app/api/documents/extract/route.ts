@@ -2,19 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getAccessStatus } from "@/lib/subscription";
 import { scanDocument, nietGeverifieerd } from "@/lib/extraction";
+import { leesBestandUitOpslag } from "@/lib/scanBestand";
 import { normalizeSupplierName } from "@/lib/types";
 import type { Categorie, ExtractedInvoiceData } from "@/lib/types";
 
 // Twee scans parallel (+ eventueel een derde ter controle) — ruim de tijd geven.
 export const maxDuration = 60;
-
-const EXT_TO_MEDIA_TYPE: Record<string, string> = {
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp",
-  pdf: "application/pdf",
-};
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -52,39 +45,10 @@ export async function POST(request: NextRequest) {
     .eq("user_id", user.id)
     .single();
 
-  const ext = doc.file_url.split(".").pop()?.toLowerCase() ?? "";
-  const mediaType = EXT_TO_MEDIA_TYPE[ext];
-
-  if (!mediaType) {
-    return NextResponse.json({ error: "Bestandstype wordt niet ondersteund." }, { status: 400 });
-  }
-
-  const { data: fileBlob, error: downloadError } = await supabase.storage
-    .from("documents")
-    .download(doc.file_url);
-
-  if (downloadError || !fileBlob) {
-    return NextResponse.json({ error: "Bestand kon niet worden opgehaald." }, { status: 500 });
-  }
-
-  const buffer = Buffer.from(await fileBlob.arrayBuffer());
-  const base64Data = buffer.toString("base64");
-
+  const uitkomst = await leesBestandUitOpslag(supabase, doc.file_url);
+  if ("fout" in uitkomst) return NextResponse.json({ error: uitkomst.fout }, { status: uitkomst.status });
   // Dubbele, onafhankelijke scan met sterke modellen + controles in code (zie lib/extraction.ts).
-  const contentBlock =
-    mediaType === "application/pdf"
-      ? ({
-          type: "document",
-          source: { type: "base64", media_type: mediaType, data: base64Data },
-        } as const)
-      : ({
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: mediaType as "image/jpeg" | "image/png" | "image/webp",
-            data: base64Data,
-          },
-        } as const);
+  const contentBlock = uitkomst.bestand;
 
   let extracted: ExtractedInvoiceData;
   try {

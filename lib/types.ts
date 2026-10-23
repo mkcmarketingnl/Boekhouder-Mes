@@ -1,3 +1,4 @@
+import type { VerrekendeKost } from "@/lib/verrekend";
 import type { BtwRegel } from "@/lib/btw";
 
 export type Rechtsvorm = "eenmanszaak" | "vof" | "bv" | "anders";
@@ -58,6 +59,10 @@ export interface ExtractedInvoiceData {
   btw_percentage: number | null;
   // Alleen gevuld als er op het document 2 of meer verschillende BTW-tarieven staan (bijv. eten 9% + drank 21%).
   btw_regels?: ExtractedBtwRegel[] | null;
+  // Kosten die op dezelfde (verkoop)factuur van het bedrag worden afgehouden, bijv. factoring. Zie lib/verrekend.ts.
+  verrekende_kosten?: VerrekendeKost[] | null;
+  // Het bedrag dat je uiteindelijk ontvangt na die inhoudingen, zoals op het document vermeld.
+  eindbedrag?: number | null;
   omschrijving: string | null;
   voorgestelde_categorie: Categorie | null;
   type: TransactieType | null;

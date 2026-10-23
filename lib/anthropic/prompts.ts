@@ -48,8 +48,7 @@ NAMEN ZORGVULDIG BEPALEN — dit gaat vaak mis, dus werk dit stap voor stap af:
 TYPE (KOSTEN OF OMZET) BEPALEN — baseer dit UITSLUITEND op wie de afzender is, nooit op de bedragen:
 - Als "{{EIGEN_BEDRIJFSNAAM}}" de afzender is (degene die de factuur heeft opgesteld/verstuurd) → dit is OMZET, ongeacht welke bedragen of aftrekposten erop staan. Zet "leverancier" dan op de naam van de KLANT (de andere partij).
 - In alle andere gevallen (de ondernemer heeft dit ontvangen van een andere partij) → dit is KOSTEN. Zet "leverancier" dan op de naam van die andere partij (de afzender).
-- BELANGRIJK: sommige verkoopfacturen (OMZET) tonen een tweede, lager eindbedrag omdat er iets wordt ingehouden — bijv. "debiteurenverzekering", "factoringkosten", "kredietverzekering", korting, betaalkosten, of een "netto over te maken bedrag". Zo'n inhouding maakt de factuur NIET tot een kostenfactuur — het blijft een OMZET-factuur van de afzender, alleen ontvangt de afzender netto iets minder uitbetaald. Laat je door zo'n inhouding dus nooit verleiden om het "type" om te zetten naar "kosten": het type volgt alleen uit wie de factuur heeft opgesteld.
-- Voorbeeld: een verkoopfactuur van "{{EIGEN_BEDRIJFSNAAM}}" aan een klant toont "Factuurbedrag: €2.000,00", dan "Debiteurenverzekering 5%: -€95,24", dan "Netto te ontvangen: €1.904,76". Dit is en blijft een OMZET-factuur (afzender = "{{EIGEN_BEDRIJFSNAAM}}"). Vul "bedrag_incl_btw" in met het oorspronkelijke factuurbedrag (€2.000,00, vóór de inhouding) — dat is het daadwerkelijke omzetbedrag van deze verkoop, niet het netto-uitbetaalde bedrag.
+- Een inhouding of aftrekpost op een verkoopfactuur (zie het kopje INHOUDINGEN hieronder) maakt de factuur NIET tot een kostenfactuur: het type volgt alleen uit wie de factuur heeft opgesteld.
 - Kun je ondanks bovenstaande stappen niet met vertrouwen bepalen wie afzender en wie klant is (bijv. beide namen onduidelijk, of geen van beide namen herkenbaar als "{{EIGEN_BEDRIJFSNAAM}}")? Zet dan "type_onzeker": true en kies voorlopig "kosten" als beste gok voor "type" — de gebruiker bevestigt dit zelf.
 
 Antwoord ALTIJD met alleen geldige JSON, zonder markdown-codeblok, exact in dit formaat:
@@ -62,6 +61,8 @@ Antwoord ALTIJD met alleen geldige JSON, zonder markdown-codeblok, exact in dit 
   "btw_bedrag": number | null,
   "btw_percentage": number | null,
   "btw_regels": [ { "percentage": number, "bedrag_incl_btw": number | null, "bedrag_excl_btw": number | null, "btw_bedrag": number | null } ] | null,
+  "verrekende_kosten": [ { "omschrijving": string, "partij": string | null, "referentie": string | null, "bedrag_excl_btw": number | null, "btw_bedrag": number | null, "bedrag_incl_btw": number | null, "btw_percentage": number | null } ] | null,
+  "eindbedrag": number | null,
   "omschrijving": string | null,
   "voorgestelde_categorie": een van [${CATEGORIE_WAARDEN}] | null,
   "type": "kosten" | "omzet",
@@ -70,6 +71,15 @@ Antwoord ALTIJD met alleen geldige JSON, zonder markdown-codeblok, exact in dit 
   "risico": "laag" | "midden" | "hoog",
   "risico_toelichting": string | null
 }
+
+INHOUDINGEN OP EEN VERKOOPFACTUUR (factoring, commissie, platformkosten) — dit komt vaak voor en moet exact kloppen:
+- Sommige facturen tonen na het factuurbedrag een tweede blok waarin kosten worden ingehouden, bijv. "Factoring 4,8%", "Debiteurenverzekering", "Commissie", "Platformkosten", "Uitbetaalkosten" of "Administratiekosten". Daaronder staat een LAGER bedrag, bijv. "Eindbedrag", "Netto te ontvangen" of "Uit te betalen". Zulke inhoudingen zijn KOSTEN die de ondernemer betaalt voor een dienst, vaak met hun eigen BTW.
+- Het type blijft OMZET (de afzender is "{{EIGEN_BEDRIJFSNAAM}}"). "bedrag_incl_btw", "bedrag_excl_btw", "btw_bedrag" en "btw_percentage" bovenaan zijn en blijven die van de ORIGINELE verkoop, dus het blok vóór de inhouding: dat is de omzet en de BTW die over de verkoop moet worden afgedragen. Zet daar nooit het lagere eindbedrag in.
+- Zet elke inhouding apart in "verrekende_kosten", altijd met POSITIEVE bedragen (ook als het document ze negatief toont, zoals "€ -23,20"): { "omschrijving": wat het is, "partij": de naam van het factoringbedrijf/platform als die op het document staat (anders null), "referentie": het kenmerk of nummer ernaast (bijv. "YOF-26320374") of null, "bedrag_excl_btw", "btw_bedrag", "bedrag_incl_btw", "btw_percentage" }. Neem de bedragen LETTERLIJK over van het document. Staat er alleen een totaalbedrag, laat de rest dan null (rekenen doen wij).
+- "eindbedrag" is het bedrag onderaan dat de ondernemer uiteindelijk ontvangt, letterlijk overgenomen (bijv. 376.10). Staat er geen eindbedrag, dan null.
+- Dit zijn GEEN verrekende kosten: een korting (die zit al in het factuurbedrag), een reeds betaald voorschot of aanbetaling, een verrekening met een eerdere factuur of creditnota, en de BTW zelf. Staan er geen inhoudingen op het document, dan is "verrekende_kosten" null en "eindbedrag" null.
+- Voorbeeld uit de praktijk: "Van: MKC Marketing … Aan: Amaze B.V." met regel "Ervaren Cocktail Shaker, 11 uren à € 30,00 = € 330,00", "BTW 21% € 69,30", "Factuurbedrag € 399,30". Daaronder: "Factoring, 4,8% over € 399,30 — Bedrag ex btw € -19,17, BTW 21% € -4,03, Factuurbedrag € -23,20" en "Eindbedrag € 376,10". Juiste uitkomst: type "omzet", bedrag_incl_btw 399.30, bedrag_excl_btw 330.00, btw_bedrag 69.30, btw_percentage 21, verrekende_kosten [ { "omschrijving": "Factoring 4,8%", "partij": null, "referentie": "YOF-26320374", "bedrag_excl_btw": 19.17, "btw_bedrag": 4.03, "bedrag_incl_btw": 23.20, "btw_percentage": 21 } ], eindbedrag 376.10. De omzet is dus € 330,00 excl. BTW; de factoring is een aparte kostenpost.
+- "Factuur uitgereikt door afnemer" (zelffacturering): de afnemer stelt de factuur op namens de leverancier. De partij na "Van:" is de leverancier/afzender en de partij na "Aan:" is de afnemer; bepaal het type met die volgorde.
 
 MEERDERE BTW-TARIEVEN OP ÉÉN DOCUMENT (belangrijk voor de BTW-aangifte van de gebruiker):
 - Staan er op het document 2 of meer VERSCHILLENDE BTW-tarieven (bijv. 9% over eten en 21% over drank; vaak als BTW-specificatie onderaan een kassabon of restaurantnota)? Zet dan "btw_percentage" op null en vul "btw_regels" met precies één regel per tarief (0% of "vrijgesteld" is ook een tarief).
@@ -82,7 +92,7 @@ Regels:
 - Namen (de "leverancier") neem je LETTERLIJK over zoals ze op het document staan, inclusief spelling, hoofdletters, punten en rechtsvorm (bijv. "bol.com B.V.", "Albert Heijn", "Kantoorwinkel De Pen B.V."). Corrigeer, vertaal, verkort of "verbeter" niets, en verzin geen naam als je er geen kunt lezen — gebruik dan null.
 - De datum lees je extra zorgvuldig: let vooral op het JAARTAL en op dag/maand-volgorde (Nederlands formaat is dd-mm-jjjj). Vul nooit een datum in die je niet echt op het document ziet staan; bij twijfel over dag, maand of jaar: null.
 - Het totaalbedrag neem je letterlijk over van het document (het bedrag dat de klant uiteindelijk verschuldigd is, incl. BTW, vóór eventuele inhoudingen zoals hieronder beschreven). Controleer vóór je antwoordt of excl. BTW + BTW ongeveer gelijk is aan het totaal; klopt dat niet, lees het document dan opnieuw.
-- "bedrag_incl_btw" is altijd het oorspronkelijke factuurbedrag (het bedrag inclusief BTW zoals dat als hoofdtotaal op de factuur staat) — nooit een lager netto-uitbetaald bedrag na een inhouding zoals hierboven beschreven.
+- "bedrag_incl_btw" is altijd het oorspronkelijke factuurbedrag (het bedrag inclusief BTW zoals dat als hoofdtotaal op de factuur staat, vóór inhoudingen) — nooit een lager netto-uitbetaald bedrag. De inhoudingen zelf staan apart in "verrekende_kosten".
 - Zet "leesbaarheid" op "slecht" als je één of meer kernvelden (bedrag, BTW, datum, naam) niet met vertrouwen kunt lezen, bijvoorbeeld door een schuine hoek, slechte belichting of een onscherpe foto.
 - "risico" gaat over of deze uitgave logisch/zakelijk verdedigbaar is gezien de bedrijfsactiviteiten "{{ACTIVITEITEN}}". Gebruik "hoog" alleen bij overduidelijk privékarakter, "midden" bij twijfel, "laag" als het duidelijk aansluit.
 - Bij "type": "omzet" is "risico" altijd "laag" met "risico_toelichting": null (de plausibiliteitscheck is alleen relevant voor kosten).
@@ -114,7 +124,9 @@ Antwoord ALTIJD met alleen geldige JSON, zonder markdown-codeblok, exact in dit 
   "totaal_excl_btw": number | null,
   "btw_bedrag": number | null,
   "btw_percentage": number | null,
-  "btw_regels": [ { "percentage": number, "bedrag_incl_btw": number | null, "bedrag_excl_btw": number | null, "btw_bedrag": number | null } ] | null
+  "btw_regels": [ { "percentage": number, "bedrag_incl_btw": number | null, "bedrag_excl_btw": number | null, "btw_bedrag": number | null } ] | null,
+  "verrekende_kosten": [ { "omschrijving": string, "bedrag_excl_btw": number | null, "btw_bedrag": number | null, "bedrag_incl_btw": number | null } ] | null,
+  "eindbedrag": number | null
 }
 
 Regels:
@@ -122,6 +134,8 @@ Regels:
 - Namen schrijf je letterlijk over, tekengetrouw (spelling, hoofdletters, punten, rechtsvorm). Niet verbeteren, niet verkorten, niets verzinnen.
 - "totaal_incl_btw" is het hoofdtotaal dat de klant verschuldigd is, inclusief BTW — bij een bon het bedrag bij "TOTAAL"/"TE BETALEN". Bij meerdere totalen (bijv. een inhouding of "netto te ontvangen" onderaan) kies je het oorspronkelijke factuurbedrag vóór die inhouding.
 - Bij meerdere VERSCHILLENDE BTW-tarieven op één document (bijv. 9% en 21%): "btw_percentage" is null, "btw_bedrag" is de som van alle BTW en "btw_regels" bevat één regel per tarief met letterlijk overgenomen bedragen (incl., excl. en/of BTW zoals ze op het document staan, anders null). Verdeel nooit zelf iets over tarieven. Is er maar één tarief, dan is "btw_regels" null.
+- "verrekende_kosten": staan er na het factuurbedrag nog regels waarin kosten worden ingehouden of afgetrokken (bijv. "Factoring", "Commissie", "Platformkosten", "Debiteurenverzekering", vaak met een eigen BTW-regel en een negatief bedrag)? Neem elke zo'n inhouding over als een eigen object, met POSITIEVE bedragen en letterlijk zoals ze op het document staan (wat er niet staat: null). Een korting, een reeds betaald voorschot en de BTW zelf zijn GEEN verrekende kosten. Staat er niets, dan null.
+- "eindbedrag": het lagere bedrag onderaan na die inhoudingen ("Eindbedrag", "Netto te ontvangen", "Uit te betalen"), letterlijk overgenomen, anders null. "totaal_incl_btw" blijft het factuurbedrag VÓÓR de inhoudingen.
 - Datum: let extra op het JAARTAL en op dag/maand-volgorde (Nederlands: dd-mm-jjjj).
 - Kun je iets niet met zekerheid lezen, vul dan null in. Gokken is erger dan null.`;
 

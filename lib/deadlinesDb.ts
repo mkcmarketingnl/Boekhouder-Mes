@@ -15,7 +15,7 @@ export async function laadMeldingen(supabase: SupabaseClient, userId: string, ti
   const jaar = Number(vandaag.slice(0, 4));
   const t = laatsteBtwTijdvak(tijdvak, vandaag);
 
-  const [btw, facturen, uren, oudeUren, verpl] = await Promise.all([
+  const [btw, facturen, uren, oudeUren, verpl, metDocument, gecontroleerd] = await Promise.all([
     supabase.from("transactions").select("id", { count: "exact", head: true }).eq("user_id", userId).gte("factuurdatum", t.begin).lte("factuurdatum", t.einde),
     (async () => {
       const metBetaling = await supabase.from("sales_invoices").select("status, vervaldatum, totaal_incl, betaald_op").eq("user_id", userId).eq("status", "definitief");
@@ -25,6 +25,10 @@ export async function laadMeldingen(supabase: SupabaseClient, userId: string, ti
     supabase.from("time_entries").select("minuten").eq("user_id", userId).eq("factureerbaar", true).is("invoice_id", null).lte("datum", minDagen(vandaag, 14)).limit(1000),
     // Nog niet betaalde verplichtingen waarvan de deadline binnen 14 dagen valt of al voorbij is
     supabase.from("geld_verplichtingen").select("id, naam, bedrag, deadline").eq("user_id", userId).is("betaald_op", null).lte("deadline", minDagen(vandaag, -14)).limit(200),
+    // Is er ooit een gescand document opgeslagen, en is de administratiecontrole nog nooit gedraaid?
+    supabase.from("transactions").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("invoerwijze", "ai"),
+    // Geen HEAD-verzoek: dat geeft bij een ontbrekende tabel geen foutmelding terug en zou dus een valse melding geven.
+    supabase.from("document_controles").select("document_id").eq("user_id", userId).limit(1),
   ]);
 
   const open = openstaand((facturen ?? []).map((f) => ({ status: f.status, vervaldatum: f.vervaldatum, totaal_incl: Number(f.totaal_incl), betaald_op: f.betaald_op })), vandaag);
@@ -39,6 +43,8 @@ export async function laadMeldingen(supabase: SupabaseClient, userId: string, ti
     teLaatBedrag: open.bedragTeLaat,
     uren: stand ? { gewerktUren: stand.gewerktUren, prognoseUren: stand.prognoseUren, opKoers: stand.opKoers } : null,
     oudeOpenUren: oudeMinuten / 60,
+    // Tabel ontbreekt (migratie 0010 niet gedraaid)? Dan geen melding: de controle zou toch niet kunnen werken.
+    controleAanbevolen: !metDocument.error && (metDocument.count ?? 0) > 0 && !gecontroleerd.error && (gecontroleerd.data?.length ?? 0) === 0,
     verplichtingen: verpl.error ? [] : (verpl.data ?? []).map((v) => ({ id: v.id as string, naam: v.naam as string, bedrag: Number(v.bedrag), deadline: v.deadline as string })),
   });
 }

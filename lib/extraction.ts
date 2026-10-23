@@ -7,6 +7,9 @@ import {
   parseClaudeJson,
 } from "@/lib/anthropic/prompts";
 import { formatCurrency } from "@/lib/format";
+import { lijktOpEigenBedrijf, zelfdeNaam } from "@/lib/namen";
+import { INFO_VERREKEND_PREFIX } from "@/lib/administratiecontrole";
+import { controleerVerrekend, maakVolledig, verrekendSignatuur, zelfdeVerrekendSignatuur, type RuweVerrekendeKost } from "@/lib/verrekend";
 import { controleerDocumentRegels, naarCenten, naarEuro, normaliseerRegels, type BtwRegel } from "@/lib/btw";
 import type { ExtractedBtwRegel, ExtractedInvoiceData, TransactieType } from "@/lib/types";
 
@@ -30,6 +33,8 @@ interface Transcriptie {
   btw_bedrag: number | null;
   btw_percentage: number | null;
   btw_regels?: RuweRegel[] | null;
+  verrekende_kosten?: RuweVerrekendeKost[] | null;
+  eindbedrag?: number | null;
 }
 
 interface RuweRegel {
@@ -48,51 +53,7 @@ interface Lezing<T> {
 
 // ---------- vergelijkhelpers ----------
 
-const RECHTSVORM_TOKENS = new Set(["bv", "nv", "vof", "cv", "sarl", "gmbh", "ltd", "llc", "inc", "eenmanszaak", "stichting"]);
-
-function naamTokens(s: string | null): string[] {
-  if (!s) return [];
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/\./g, "")
-    .replace(/&/g, " en ")
-    .split(/[^a-z0-9]+/)
-    .filter((t) => t && !RECHTSVORM_TOKENS.has(t));
-}
-
-function levenshtein(a: string, b: string): number {
-  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-  for (let j = 1; j <= b.length; j++) dp[0][j] = j;
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
-      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    }
-  }
-  return dp[a.length][b.length];
-}
-
-// Strikt: dezelfde naam, op hoofdletters, leestekens, spaties en rechtsvorm na. Spelfouten tellen
-// bewust als VERSCHIL — juist die willen we door een derde lezing laten beslechten.
-export function zelfdeNaam(a: string | null, b: string | null): boolean {
-  const x = naamTokens(a);
-  const y = naamTokens(b);
-  if (x.length === 0 || y.length === 0) return false;
-  if (x.join("") === y.join("")) return true;
-  const [kort, lang] = x.length <= y.length ? [x, y] : [y, x];
-  return kort.join("").length >= 5 && kort.every((t, i) => lang[i] === t);
-}
-
-// Soepel: om te bepalen of een naam op het document "mijn bedrijf" is (handelsnaam wijkt vaak licht af).
-export function lijktOpEigenBedrijf(eigen: string, naam: string | null): boolean {
-  const x = naamTokens(eigen).join("");
-  const y = naamTokens(naam).join("");
-  if (!x || !y) return false;
-  if (x === y) return true;
-  if (Math.min(x.length, y.length) >= 5 && (x.includes(y) || y.includes(x))) return true;
-  return 1 - levenshtein(x, y) / Math.max(x.length, y.length) >= 0.8;
-}
+export { zelfdeNaam, lijktOpEigenBedrijf };
 
 const zelfdeBedrag = (a: number, b: number) => Math.abs(a - b) < 0.011;
 const zelfdeTekst = (a: string, b: string) => a === b;
@@ -165,6 +126,12 @@ function toonSignatuur(v: string): string {
     .join(" + ");
 }
 
+function toonVerrekend(v: string): string {
+  if (v === "geen") return "geen inhoudingen";
+  if (v === "onleesbaar") return "niet goed te lezen";
+  return "inhouding van " + v.split("|").map((c) => formatCurrency(Number(c) / 100)).join(" + ");
+}
+
 // ---------- stemmen per veld ----------
 
 interface Stem<T> {
@@ -235,6 +202,8 @@ export function nietGeverifieerd(reden: string): ExtractedInvoiceData {
     btw_bedrag: null,
     btw_percentage: null,
     btw_regels: null,
+    verrekende_kosten: null,
+    eindbedrag: null,
     omschrijving: null,
     voorgestelde_categorie: null,
     type: null,
@@ -257,6 +226,8 @@ interface Analyse {
   nummer: Stem<string>;
   btwPercentage: Stem<number>;
   regels: Stem<string>;
+  // Kosten die op de factuur worden ingehouden (factoring e.d.): ziet elke scan dezelfde inhoudingen?
+  verrekend: Stem<string>;
 }
 
 export function analyseer(a: ExtractedInvoiceData, tr: { bron: Bron; t: Transcriptie | null }[], eigen: string): Analyse {
@@ -308,11 +279,21 @@ export function analyseer(a: ExtractedInvoiceData, tr: { bron: Bron; t: Transcri
       zelfdeRegelSignatuur,
       true
     ),
+    // Eén scan die een inhouding ziet en een andere die er geen ziet, is een tegenspraak: dat gaat naar de gebruiker
+    // (of naar de controlescan), en wordt nooit stilzwijgend weggelaten. Een scan die mislukte telt niet mee.
+    verrekend: stem<string>(
+      [
+        { bron: "scan 1", waarde: verrekendSignatuur(a.verrekende_kosten as unknown as RuweVerrekendeKost[] | null) },
+        ...tr.map(({ bron, t }) => ({ bron, waarde: t ? verrekendSignatuur(t.verrekende_kosten) : null })),
+      ],
+      zelfdeVerrekendSignatuur,
+      true
+    ),
   };
 }
 
 export const heeftVerschil = (x: Analyse) =>
-  !x.type.unaniem || !x.naam.unaniem || !x.bedrag.unaniem || !x.datum.unaniem || !x.nummer.unaniem || !x.btwPercentage.unaniem || !x.regels.unaniem;
+  !x.type.unaniem || !x.naam.unaniem || !x.bedrag.unaniem || !x.datum.unaniem || !x.nummer.unaniem || !x.btwPercentage.unaniem || !x.regels.unaniem || !x.verrekend.unaniem;
 
 // ---------- hoofdfunctie ----------
 
@@ -366,6 +347,7 @@ export async function scanDocument(params: {
   verschil("BTW-percentage", analyse.btwPercentage, (v) => `${v}%`);
   verschil("Soort (kosten/omzet)", analyse.type, (v) => v);
   verschil("BTW-tarieven", analyse.regels, toonSignatuur);
+  verschil("Inhoudingen op de factuur (bijv. factoring)", analyse.verrekend, toonVerrekend);
 
   // BTW-regels: de gekozen verdeling komt van de lezing die dat zag (eerst scan 1, dan de controles).
   const gekozenSignatuur = analyse.regels.gekozen ?? "enkel";
@@ -398,6 +380,26 @@ export async function scanDocument(params: {
     type: analyse.type.gekozen ?? a.type,
     type_onzeker: a.type_onzeker || !analyse.type.unaniem,
   };
+
+  // Verrekende kosten (factoring e.d.): de lijst komt van de lezing die dezelfde inhoudingen zag als de gekozen uitkomst.
+  const gekozenVerrekend = analyse.verrekend.gekozen ?? "geen";
+  const verrekendBronnen: { ruw: RuweVerrekendeKost[] | null | undefined; eind: number | null | undefined }[] = [
+    { ruw: a.verrekende_kosten as unknown as RuweVerrekendeKost[] | null, eind: a.eindbedrag },
+    ...transcripties.map((x) => ({ ruw: x.t?.verrekende_kosten, eind: x.t?.eindbedrag })),
+  ];
+  let verrekendOnleesbaar = gekozenVerrekend === "onleesbaar";
+  let verrekendRuw: RuweVerrekendeKost[] | null = null;
+  let verrekendeKosten = maakVolledig(null).kosten;
+  if (gekozenVerrekend !== "geen" && gekozenVerrekend !== "onleesbaar") {
+    const bron = verrekendBronnen.find((x) => zelfdeVerrekendSignatuur(verrekendSignatuur(x.ruw), gekozenVerrekend));
+    verrekendRuw = bron?.ruw ?? null;
+    const gelezen = maakVolledig(verrekendRuw);
+    verrekendeKosten = gelezen.kosten;
+    verrekendOnleesbaar = verrekendeKosten.length === 0 || gelezen.onleesbaar;
+  }
+  const eindbedrag = verrekendBronnen.map((x) => x.eind).find((e): e is number => typeof e === "number" && e > 0) ?? null;
+  final.verrekende_kosten = verrekendeKosten.length > 0 ? verrekendeKosten : null;
+  final.eindbedrag = eindbedrag;
 
   // ---------- harde controles in code (los van de AI) ----------
   if (!final.leverancier?.trim()) afwijkingen.push("Er is geen naam gevonden op het document.");
@@ -450,6 +452,25 @@ export async function scanDocument(params: {
     if (Math.abs(afgeleid - final.btw_percentage) > 1.5) {
       afwijkingen.push(`Het BTW-percentage (${final.btw_percentage}%) past niet bij de bedragen op het document (±${afgeleid.toFixed(0)}%). Staan er meerdere BTW-tarieven op? Controleer het percentage — het bepaalt je BTW-saldo.`);
     }
+  }
+
+  // Inhoudingen (factoring e.d.): altijd langs de gebruiker, want ze veranderen wat er geboekt wordt.
+  if (verrekendOnleesbaar) {
+    afwijkingen.push("Er worden kosten ingehouden op dit document (bijv. factoring), maar de bedragen zijn niet goed te lezen — vul de kosten zelf in.");
+  }
+  if (verrekendeKosten.length > 0) {
+    afwijkingen.push(...controleerVerrekend(verrekendRuw, verrekendeKosten, final.bedrag_incl_btw, eindbedrag));
+    afwijkingen.push(
+      `${INFO_VERREKEND_PREFIX} (bijv. factoring). De omzet blijft het volledige factuurbedrag; de ingehouden kosten boeken we als aparte kostenpost. Controleer de bedragen hieronder.`
+    );
+    if (final.type !== "omzet") {
+      afwijkingen.push("Er staan ingehouden kosten op een document dat als kosten is gelezen — controleer of dit wel een kostenfactuur is.");
+    }
+  } else if (eindbedrag !== null && final.bedrag_incl_btw !== null && eindbedrag < final.bedrag_incl_btw - 0.03) {
+    // vangnet: het document noemt een lager eindbedrag, maar we vonden geen inhouding
+    afwijkingen.push(
+      `Het document noemt een lager eindbedrag (${formatCurrency(eindbedrag)}) dan het factuurbedrag (${formatCurrency(final.bedrag_incl_btw)}). Zijn er kosten ingehouden (bijv. factoring) of is er een voorschot afgetrokken? Controleer dit met je document.`
+    );
   }
 
   final.controle_afwijkingen = afwijkingen;
