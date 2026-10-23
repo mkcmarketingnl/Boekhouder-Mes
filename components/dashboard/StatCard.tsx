@@ -20,7 +20,7 @@ export function StatCard({
   const Wrapper = highlight ? CardHighlight : Card;
   return (
     <Wrapper className={cn("p-3.5", className)}>
-      <div className="mb-2 flex items-center gap-1.5">
+      <div className="mb-1.5 flex items-center gap-1.5">
         {icon}
         <span
           className={cn(

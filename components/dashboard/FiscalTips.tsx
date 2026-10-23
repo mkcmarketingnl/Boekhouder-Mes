@@ -80,7 +80,7 @@ export function FiscalTips() {
   }
 
   return (
-    <Card className="p-5">
+    <Card className="p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Sparkles size={16} className="text-stamp" />
@@ -101,10 +101,7 @@ export function FiscalTips() {
       {error && <p className="text-sm text-stamp">{error}</p>}
 
       {!loading && tips.length === 0 && !error && (
-        <p className="text-[13px] text-muted">
-          Nog geen tips gegenereerd. Klik op &ldquo;Genereer tips&rdquo; voor persoonlijke, simpel
-          uitgelegde fiscale suggesties op basis van je huidige cijfers.
-        </p>
+        <p className="text-[12.5px] leading-relaxed text-muted">Persoonlijke, simpel uitgelegde suggesties op basis van je cijfers. Klik op &ldquo;Genereer tips&rdquo;.</p>
       )}
 
       {tips.length > 0 && (
@@ -127,9 +124,7 @@ export function FiscalTips() {
         </ul>
       )}
 
-      <p className="mt-3 border-t border-line pt-2.5 text-[11px] leading-relaxed text-muted">
-        {TIP_DISCLAIMER}
-      </p>
+      <p className="mt-3 text-[11px] leading-relaxed text-muted">{TIP_DISCLAIMER}</p>
     </Card>
   );
 }

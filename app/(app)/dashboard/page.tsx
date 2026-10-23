@@ -97,11 +97,11 @@ export default async function DashboardPage({
   }
 
   return (
-    <div className="fade-in space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="fade-in space-y-4 sm:space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="display text-2xl font-semibold">Welkom terug, {profile.voornaam}</h1>
-          <Link href="/onboarding" className="mt-1 inline-block text-xs text-muted underline">
+          <h1 className="display text-xl font-semibold sm:text-2xl">Welkom terug, {profile.voornaam}</h1>
+          <Link href="/onboarding" className="text-xs text-muted underline">
             profiel bewerken
           </Link>
         </div>
@@ -109,10 +109,6 @@ export default async function DashboardPage({
       </div>
 
       <MeldingenBalk meldingen={meldingen} />
-
-      <p className="rounded-md border border-line bg-paper-dark px-3.5 py-2.5 text-[12.5px] leading-relaxed text-muted">
-        {DASHBOARD_DISCLAIMER}
-      </p>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PeriodSelector active={periodType} />
@@ -125,7 +121,7 @@ export default async function DashboardPage({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Omzet" suffix="excl. btw" value={snapshot.omzet} icon={<TrendingUp size={15} className="text-ok" />} />
         <StatCard label="Kosten" suffix="excl. btw" value={snapshot.kosten} icon={<TrendingDown size={15} className="text-stamp" />} />
-        <StatCard label="Winst" suffix="excl. btw" value={snapshot.winst} icon={<PiggyBank size={15} className="text-paper/70" />} highlight />
+        <StatCard label="Winst" suffix={snapshot.omzet > 0 ? `excl. btw · ${Math.round((snapshot.winst / snapshot.omzet) * 100)}% van omzet` : "excl. btw"} value={snapshot.winst} icon={<PiggyBank size={15} className="text-paper/70" />} highlight />
         <StatCard
           label={`BTW-saldo (${periodType})`}
           value={Math.abs(snapshot.btwSaldo)}
@@ -136,14 +132,16 @@ export default async function DashboardPage({
 
       <p className="text-[12.5px] leading-relaxed text-muted">{btwUitlegzin(snapshot.btwSaldo, label)}</p>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* Grafiek en belasting naast elkaar, zo hoog als elkaar; daaronder de documenten en de tips. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <RevenueChart data={trend} />
+        </div>
         <TaxEstimateCard estimate={taxEstimate} jaar={new Date().getFullYear()} />
-        <FiscalTips />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
-        <RevenueChart data={trend} />
-        <div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
           <h2 className="display mb-3 text-[15px] font-semibold">
             Documenten {isCurrentPeriod ? "" : `— ${label}`} <span className="text-xs font-normal text-muted">(bedragen incl. btw)</span>
           </h2>
@@ -164,7 +162,12 @@ export default async function DashboardPage({
             </>
           )}
         </div>
+        <div>
+          <FiscalTips />
+        </div>
       </div>
+
+      <p className="pt-1 text-[11px] leading-relaxed text-muted">{DASHBOARD_DISCLAIMER}</p>
     </div>
   );
 }
