@@ -77,6 +77,7 @@ export function ControleBeheer({
   const [kaartFout, setKaartFout] = useState<Record<string, string>>({});
   const [kaartOk, setKaartOk] = useState<Record<string, string>>({});
   const [toegepast, setToegepast] = useState<Record<string, string>>({});
+  const [laatsteActie, setLaatsteActie] = useState<string | null>(null);
   const [bezigMet, setBezigMet] = useState<string | null>(null);
   const stop = useRef(false);
 
@@ -144,12 +145,19 @@ export function ControleBeheer({
     setBezigMet(b.id);
     setKaartFout((f) => ({ ...f, [doc.documentId]: "" }));
     setKaartOk((f) => ({ ...f, [doc.documentId]: "" }));
-    const res = await pasBevindingToe(userId, doc.documentId, b);
+    setLaatsteActie(null);
+    let res: { error: string | null };
+    try {
+      res = await pasBevindingToe(userId, doc.documentId, b);
+    } catch {
+      res = { error: "Aanpassen is mislukt (geen verbinding?). Probeer het opnieuw." };
+    }
     setBezigMet(null);
     if (res.error) {
       setKaartFout((f) => ({ ...f, [doc.documentId]: res.error ?? "Aanpassen is mislukt." }));
       return;
     }
+    setLaatsteActie(`Aangepast en opgeslagen bij ${doc.titel}: ${b.titel.charAt(0).toLowerCase()}${b.titel.slice(1)}`);
     // Pas als de pagina met de opgeslagen gegevens is ververst, zien we of het verschil echt weg is
     setToegepast((t) => ({ ...t, [doc.documentId]: b.id }));
     startVerversen(() => router.refresh());
@@ -248,6 +256,12 @@ export function ControleBeheer({
           <Link href="/btw" className="underline">Naar je BTW-aangifte</Link> <span className="text-muted">(daar zie je welke facturen in omzet en voorbelasting zitten)</span>
         </p>
       </Card>
+
+      {laatsteActie && (
+        <p className="flex items-start gap-2 rounded-md border border-ok/30 bg-card px-3.5 py-2.5 text-[13px] text-ok" role="status">
+          <CheckCircle2 size={15} className="mt-0.5 shrink-0" /> {laatsteActie}
+        </p>
+      )}
 
       {metAfwijking.length > 0 && (
         <section>

@@ -225,7 +225,7 @@ export async function updateTransaction(
   const supabase = createClient();
   const bedragen = bepaalBedragen(input);
 
-  const { error } = await supabase
+  const { data: bijgewerkt, error } = await supabase
     .from("transactions")
     .update({
       factuurnummer: input.factuurnummer,
@@ -240,12 +240,20 @@ export async function updateTransaction(
       type: input.type,
       categorie: input.categorie,
     })
-    .eq("id", transactionId);
+    .eq("id", transactionId)
+    .eq("user_id", userId)
+    .select("id");
 
   if (error) {
     if (isMissendeKolom(error)) return { error: MIGRATIE_NODIG };
     return { error: "Bijwerken is mislukt. Probeer het opnieuw." };
   }
+  // Een update die geen enkele rij raakt (boeking weg of niet van jou) geeft geen foutmelding terug; dat melden we wel
+  if (!bijgewerkt || bijgewerkt.length === 0) return { error: "Deze boeking kon niet worden bijgewerkt. Ververs de pagina en probeer het opnieuw." };
+
+  // Ingehouden kosten horen bij de factuur en volgen de datum ervan (anders vallen ze in een ander tijdvak). Zonder
+  // migratie 0011 bestaat de kolom ingehouden_op niet; dan is er niets te volgen.
+  await supabase.from("transactions").update({ factuurdatum: input.factuurdatum }).eq("ingehouden_op", transactionId).eq("user_id", userId);
 
   if (input.type === "kosten") {
     await rememberSupplier(userId, input.leverancier, input.categorie, input.type);
