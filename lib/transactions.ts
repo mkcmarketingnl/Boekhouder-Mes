@@ -19,6 +19,8 @@ export interface SaveTransactionInput {
   risico: RisicoNiveau;
   risico_toelichting: string | null;
   invoerwijze: Invoerwijze;
+  // Gevuld bij een kost die op een verkoopfactuur is ingehouden: hoort bij die factuur (migratie 0011)
+  ingehouden_op?: string | null;
 }
 
 // Eén plek waar de op te slaan bedragen worden bepaald, zodat opslaan en bewerken nooit uit elkaar lopen:
@@ -109,7 +111,7 @@ export async function saveTransaction(
   const supabase = createClient();
   const bedragen = bepaalBedragen(input);
 
-  const { data: opgeslagen, error } = await supabase.from("transactions").insert({
+  const rij = {
     document_id: input.document_id,
     user_id: userId,
     factuurnummer: input.factuurnummer,
@@ -127,7 +129,12 @@ export async function saveTransaction(
     risico: input.risico,
     risico_toelichting: input.risico_toelichting,
     invoerwijze: input.invoerwijze,
-  }).select("id").single();
+  };
+  let { data: opgeslagen, error } = await supabase.from("transactions").insert({ ...rij, ...(input.ingehouden_op ? { ingehouden_op: input.ingehouden_op } : {}) }).select("id").single();
+  // Nog geen migratie 0011? Dan slaan we de kost op zonder koppeling in plaats van dat opslaan mislukt.
+  if (error && input.ingehouden_op && /ingehouden_op/i.test(error.message)) {
+    ({ data: opgeslagen, error } = await supabase.from("transactions").insert(rij).select("id").single());
+  }
 
   if (error || !opgeslagen) {
     if (bedragen.regels && isMissendeKolom(error)) return { error: MIGRATIE_NODIG };
@@ -179,10 +186,10 @@ export async function saveTransactionMetKosten(
   if (hoofd.error || !hoofd.id) return { error: hoofd.error ?? "Opslaan is mislukt. Probeer het opnieuw." };
   const opgeslagen: string[] = [hoofd.id];
   for (const kost of kosten) {
-    const res = await saveTransaction(
-      userId,
-      kostAlsTransactie(kost, { document_id: input.document_id, factuurdatum: input.factuurdatum, factuurnummer: input.factuurnummer, leverancier: input.leverancier })
-    );
+    const res = await saveTransaction(userId, {
+      ...kostAlsTransactie(kost, { document_id: input.document_id, factuurdatum: input.factuurdatum, factuurnummer: input.factuurnummer, leverancier: input.leverancier }),
+      ingehouden_op: hoofd.id,
+    });
     if (res.error || !res.id) {
       for (const id of opgeslagen) await deleteTransaction(id);
       return { error: "De ingehouden kosten konden niet worden opgeslagen, dus er is niets opgeslagen. Probeer het opnieuw." };

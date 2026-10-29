@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { Aangifte, RubriekBron } from "@/lib/btwAangifte";
@@ -205,11 +206,14 @@ export function BtwModus({
   periodeLabel,
   uiterlijk,
   periodeLoopt,
+  controle,
 }: {
   aangifte: Aangifte;
   periodeLabel: string;
   uiterlijk: Date;
   periodeLoopt: boolean;
+  // hoeveel documenten in dit tijdvak met de nieuwste scan zijn gecontroleerd; null als dat niet te bepalen is
+  controle: { documenten: number; gecontroleerd: number; href: string } | null;
 }) {
   const a = aangifte;
   const teBetalen = a.subtotaal >= 0;
@@ -232,6 +236,20 @@ export function BtwModus({
           {periodeLoopt && " Deze periode loopt nog: er kunnen nog facturen bijkomen, dus dit bedrag kan nog veranderen."}
         </p>
       </Card>
+
+      {controle && controle.documenten > 0 && (
+        <Card className={`p-4 ${controle.gecontroleerd < controle.documenten ? "border-warn/30 bg-warn-bg" : ""}`}>
+          <p className="text-[13px] leading-relaxed">
+            <strong>{controle.gecontroleerd} van {controle.documenten}</strong> documenten in {periodeLabel} zijn gecontroleerd met de nieuwste scan.{" "}
+            {controle.gecontroleerd < controle.documenten
+              ? "Doe de administratiecontrole vóór je aangifte, zodat bedragen en BTW-tarieven (ook 9% en 21% op één bon) zeker kloppen."
+              : "Controleer eventuele verschillen nog even in de administratiecontrole."}
+          </p>
+          <Link href={controle.href} className="mt-1 inline-flex min-h-11 items-center text-[13px] font-medium underline">
+            Naar de administratiecontrole
+          </Link>
+        </Card>
+      )}
 
       {/* In gewone taal */}
       <Card className="p-5">
@@ -352,10 +370,19 @@ export function BtwModus({
           </Rubriek>
           <Rubriek
             code="5b"
+            open
             titel="Voorbelasting"
             uitleg="De BTW die je zelf hebt betaald over zakelijke aankopen en die je mag terugvragen. Niet alle BTW mag je terugvragen (zie het kader ‘BTW die je niet mag terugvragen’, als dat hierboven staat)."
           >
             <p className="mono text-[13px] font-semibold text-ink">{eur(a.voorbelasting)}</p>
+            {a.voorbelastingBronnen.length > 0 ? (
+              <details open>
+                <summary className="min-h-11 cursor-pointer text-[12.5px] font-medium text-ink underline">Welke kostenfacturen zitten hierin? ({a.voorbelastingBronnen.length})</summary>
+                <BronLijst bronnen={a.voorbelastingBronnen} toonPercentage />
+              </details>
+            ) : (
+              <p className="text-[12px] text-muted">Geen kostenfacturen met aftrekbare BTW in deze periode.</p>
+            )}
           </Rubriek>
           <Rubriek
             code="5c"

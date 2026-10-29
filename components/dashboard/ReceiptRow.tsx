@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { deleteTransaction } from "@/lib/transactions";
+import { naarCenten, naarEuro } from "@/lib/btw";
 import type { Transaction } from "@/lib/types";
 
 export function ReceiptRow({
@@ -14,13 +15,17 @@ export function ReceiptRow({
   isNew,
   onOpenDetail,
 }: {
-  t: Transaction;
+  t: Transaction & { ingehouden?: Transaction[] };
   isNew?: boolean;
   onOpenDetail?: () => void;
 }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Ingehouden kosten (factoring e.d.) horen bij de factuur: bovenaan zie je wat je netto ontvangt
+  const ingehouden = t.ingehouden ?? [];
+  const ingehoudenCenten = ingehouden.reduce((a, k) => a + naarCenten(k.bedrag_incl_btw), 0);
+  const getoond = naarEuro(naarCenten(t.bedrag_incl_btw) - ingehoudenCenten);
 
   async function handleDelete() {
     setDeleting(true);
@@ -38,7 +43,7 @@ export function ReceiptRow({
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-stamp" />
           <div className="min-w-0 flex-1">
             <p className="text-[12.5px] leading-relaxed text-ink">
-              <strong>{t.leverancier}</strong> ({formatCurrency(t.bedrag_incl_btw)}) definitief verwijderen? Dit
+              <strong>{t.leverancier}</strong> ({formatCurrency(t.bedrag_incl_btw)}) definitief verwijderen?{ingehouden.length > 0 ? " De ingehouden kosten bij deze factuur gaan er ook mee weg." : ""} Dit
               kan niet ongedaan worden gemaakt.
             </p>
             <div className="mt-2.5 flex gap-2">
@@ -76,8 +81,13 @@ export function ReceiptRow({
           <div className="text-right">
             <div className="mono text-sm font-semibold text-ink">
               {t.type === "omzet" ? "+" : "−"}
-              {formatCurrency(t.bedrag_incl_btw)}
+              {formatCurrency(getoond)}
             </div>
+            {ingehouden.length > 0 && (
+              <div className="mono mt-0.5 text-[10.5px] text-muted">
+                factuur {formatCurrency(t.bedrag_incl_btw)} − {formatCurrency(naarEuro(ingehoudenCenten))}
+              </div>
+            )}
             <div className="mt-1.5">
               <StatusBadge risico={t.risico} />
             </div>

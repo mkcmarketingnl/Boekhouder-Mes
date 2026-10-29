@@ -44,6 +44,8 @@ export interface Aangifte {
   voorbelasting: number; // 5b
   subtotaal: number; // 5c = 5a - 5b  (positief = te betalen, negatief = terug te vragen)
   nietAftrekbaar: { btw: number; bronnen: RubriekBron[] };
+  // de kostenfacturen (per BTW-tarief) waarvan de BTW in de voorbelasting (5b) zit
+  voorbelastingBronnen: RubriekBron[];
   // kosten met 0% BTW: bij buitenlandse leveranciers (bijv. software uit de EU/VS) hoort dit mogelijk in 4a/4b
   nulProcentKosten: RubriekBron[];
   aantalOmzetFacturen: number;
@@ -61,6 +63,7 @@ export function berekenAangifte(transacties: AangifteTransactie[]): Aangifte {
   let nietAftrekbaarC = 0;
   const nietAftrekbaarBronnen: RubriekBron[] = [];
   const nulKosten: RubriekBron[] = [];
+  const voorbelastingBronnen: RubriekBron[] = [];
   let omzetFacturen = 0;
   let kostenFacturen = 0;
 
@@ -91,6 +94,7 @@ export function berekenAangifte(transacties: AangifteTransactie[]): Aangifte {
         doel.bronnen.push(bron);
       } else if (isVoorbelastingAftrekbaar(t)) {
         voorbelastingC += btw;
+        voorbelastingBronnen.push(bron);
         if (regel.percentage === 0) nulKosten.push(bron);
       } else {
         nietAftrekbaarC += btw;
@@ -117,6 +121,7 @@ export function berekenAangifte(transacties: AangifteTransactie[]): Aangifte {
     voorbelasting: naarEuro(voorbelastingC),
     subtotaal: naarEuro(verschuldigdC - voorbelastingC),
     nietAftrekbaar: { btw: naarEuro(nietAftrekbaarC), bronnen: nietAftrekbaarBronnen },
+    voorbelastingBronnen,
     nulProcentKosten: nulKosten,
     aantalOmzetFacturen: omzetFacturen,
     aantalKostenFacturen: kostenFacturen,

@@ -18,6 +18,8 @@ import type { Transaction, TransactieType } from "@/lib/types";
 
 export interface TransactionWithDoc extends Transaction {
   documents: { file_url: string } | null;
+  // Kosten die op deze factuur zijn ingehouden (bijv. factoring)
+  ingehouden?: Transaction[];
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -247,6 +249,12 @@ export function TransactionDetailModal({ transaction, onClose }: { transaction: 
           <Row label="Factuurnummer" value={transaction.factuurnummer} />
           <Row label="Categorie" value={transaction.categorie} />
           <Row label="Bedrag excl. BTW" value={formatCurrency(transaction.bedrag_excl_btw)} />
+          {(transaction.ingehouden ?? []).map((k) => (
+            <Row key={k.id} label={`Ingehouden: ${k.leverancier}`} value={`− ${formatCurrency(k.bedrag_incl_btw)} (${formatCurrency(k.bedrag_excl_btw)} + ${formatCurrency(k.btw_bedrag)} BTW)`} />
+          ))}
+          {(transaction.ingehouden ?? []).length > 0 && (
+            <Row label="Je ontvangt netto" value={formatCurrency(transaction.bedrag_incl_btw - (transaction.ingehouden ?? []).reduce((a, k) => a + k.bedrag_incl_btw, 0))} />
+          )}
           <Row label="BTW-bedrag" value={formatCurrency(transaction.btw_bedrag)} />
           {isGemengd(transaction.btw_regels) ? (
             transaction.btw_regels.map((r) => (

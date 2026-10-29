@@ -46,6 +46,8 @@ NAMEN ZORGVULDIG BEPALEN — dit gaat vaak mis, dus werk dit stap voor stap af:
 - Lees de naam die je invult over van hoe hij op de factuur staat (inclusief rechtsvormtoevoeging als die er staat) — verzin of verkort niets.
 
 TYPE (KOSTEN OF OMZET) BEPALEN — baseer dit UITSLUITEND op wie de afzender is, nooit op de bedragen:
+- {{EIGEN_IDENTIFICATIE}}Dit zijn je sterkste aanwijzingen, sterker dan de naam: staat het KVK- of BTW-nummer van "{{EIGEN_BEDRIJFSNAAM}}" in het blok van de AFZENDER (briefhoofd, "Van:", de partij die het IBAN en de betaalgegevens vermeldt) → OMZET. Staat het in het blok van de KLANT ("Aan:", "Factuur aan", "T.a.v.") → KOSTEN. Staan de nummers er niet (op een bon of een factuur zonder nummers), val dan terug op de naam.
+- Let op bij "Factuur uitgereikt door afnemer" (zelffacturering): de afnemer heeft de factuur opgesteld, maar de afzender is nog steeds de leverancier die na "Van:" staat.
 - Als "{{EIGEN_BEDRIJFSNAAM}}" de afzender is (degene die de factuur heeft opgesteld/verstuurd) → dit is OMZET, ongeacht welke bedragen of aftrekposten erop staan. Zet "leverancier" dan op de naam van de KLANT (de andere partij).
 - In alle andere gevallen (de ondernemer heeft dit ontvangen van een andere partij) → dit is KOSTEN. Zet "leverancier" dan op de naam van die andere partij (de afzender).
 - Een inhouding of aftrekpost op een verkoopfactuur (zie het kopje INHOUDINGEN hieronder) maakt de factuur NIET tot een kostenfactuur: het type volgt alleen uit wie de factuur heeft opgesteld.
@@ -98,11 +100,12 @@ Regels:
 - Bij "type": "omzet" is "risico" altijd "laag" met "risico_toelichting": null (de plausibiliteitscheck is alleen relevant voor kosten).
 - Als de afbeelding geen bon/factuur is of volledig onleesbaar is, zet alle bedragvelden op null en "leesbaarheid" op "slecht".`;
 
-export function buildExtractionSystemPrompt(eigenBedrijfsnaam: string, activiteiten: string): string {
-  return EXTRACTION_SYSTEM_PROMPT.replace(/\{\{EIGEN_BEDRIJFSNAAM\}\}/g, eigenBedrijfsnaam).replace(
-    "{{ACTIVITEITEN}}",
-    activiteiten
-  );
+export function buildExtractionSystemPrompt(eigenBedrijfsnaam: string, activiteiten: string, eigenKvk?: string | null, eigenBtw?: string | null): string {
+  const nummers = [eigenKvk?.trim() ? `KVK-nummer ${eigenKvk.trim()}` : null, eigenBtw?.trim() ? `BTW-nummer ${eigenBtw.trim()}` : null].filter(Boolean).join(" en ");
+  const identificatie = nummers ? `De ondernemer heeft ${nummers}. ` : "";
+  return EXTRACTION_SYSTEM_PROMPT.replace(/\{\{EIGEN_BEDRIJFSNAAM\}\}/g, () => eigenBedrijfsnaam)
+    .replace("{{EIGEN_IDENTIFICATIE}}", () => identificatie)
+    .replace("{{ACTIVITEITEN}}", () => activiteiten);
 }
 
 export function buildExtractionUserPrompt(): string {
@@ -117,7 +120,11 @@ export const TRANSCRIPTIE_SYSTEM_PROMPT = `Je leest een factuur of kassabon en s
 Antwoord ALTIJD met alleen geldige JSON, zonder markdown-codeblok, exact in dit formaat:
 {
   "afzender_naam": string | null,
+  "afzender_kvk": string | null,
+  "afzender_btw": string | null,
   "geadresseerde_naam": string | null,
+  "geadresseerde_kvk": string | null,
+  "geadresseerde_btw": string | null,
   "factuurnummer": string | null,
   "factuurdatum": string | null (formaat YYYY-MM-DD),
   "totaal_incl_btw": number | null,
@@ -132,6 +139,7 @@ Antwoord ALTIJD met alleen geldige JSON, zonder markdown-codeblok, exact in dit 
 Regels:
 - "afzender_naam": de partij die het document heeft opgesteld/uitgegeven (briefhoofd, winkelnaam bovenaan een bon). "geadresseerde_naam": de klant aan wie de factuur is gericht ("Aan:", "Factuuradres", "Debiteur"); bij een kassabon is dit meestal null.
 - Namen schrijf je letterlijk over, tekengetrouw (spelling, hoofdletters, punten, rechtsvorm). Niet verbeteren, niet verkorten, niets verzinnen.
+- "afzender_kvk" / "afzender_btw" en "geadresseerde_kvk" / "geadresseerde_btw": het KVK-nummer en het BTW-nummer dat bij die partij staat (in het blok van de afzender, resp. van de klant), letterlijk overgenomen. Staat er bij een partij geen nummer, of is het veld leeg, dan null. Haal de nummers van de twee partijen nooit door elkaar.
 - "totaal_incl_btw" is het hoofdtotaal dat de klant verschuldigd is, inclusief BTW — bij een bon het bedrag bij "TOTAAL"/"TE BETALEN". Bij meerdere totalen (bijv. een inhouding of "netto te ontvangen" onderaan) kies je het oorspronkelijke factuurbedrag vóór die inhouding.
 - Bij meerdere VERSCHILLENDE BTW-tarieven op één document (bijv. 9% en 21%): "btw_percentage" is null, "btw_bedrag" is de som van alle BTW en "btw_regels" bevat één regel per tarief met letterlijk overgenomen bedragen (incl., excl. en/of BTW zoals ze op het document staan, anders null). Verdeel nooit zelf iets over tarieven. Is er maar één tarief, dan is "btw_regels" null.
 - "verrekende_kosten": staan er na het factuurbedrag nog regels waarin kosten worden ingehouden of afgetrokken (bijv. "Factoring", "Commissie", "Platformkosten", "Debiteurenverzekering", vaak met een eigen BTW-regel en een negatief bedrag)? Neem elke zo'n inhouding over als een eigen object, met POSITIEVE bedragen en letterlijk zoals ze op het document staan (wat er niet staat: null). Een korting, een reeds betaald voorschot en de BTW zelf zijn GEEN verrekende kosten. Staat er niets, dan null.

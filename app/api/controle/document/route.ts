@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAccessStatus } from "@/lib/subscription";
 import { scanDocument, nietGeverifieerd } from "@/lib/extraction";
 import { leesBestandUitOpslag } from "@/lib/scanBestand";
-import { vergelijkDocument, type OpgeslagenTx, type ScanUitkomst } from "@/lib/administratiecontrole";
+import { txUitRij, vergelijkDocument, type OpgeslagenTx, type ScanUitkomst } from "@/lib/administratiecontrole";
 import { isTabelOntbreekt } from "@/lib/facturen";
 import type { ExtractedInvoiceData } from "@/lib/types";
 
@@ -23,7 +23,7 @@ function naarScanUitkomst(e: ExtractedInvoiceData): ScanUitkomst {
     bedrag_excl_btw: e.bedrag_excl_btw,
     btw_bedrag: e.btw_bedrag,
     btw_percentage: e.btw_percentage,
-    heeftBtwRegels: !!e.btw_regels && e.btw_regels.length >= 2,
+    btw_regels: e.btw_regels && e.btw_regels.length >= 2 ? e.btw_regels.filter((r) => r.bedrag_incl_btw != null).map((r) => ({ percentage: r.percentage, bedrag_incl_btw: Number(r.bedrag_incl_btw) })) : null,
     verrekende_kosten: e.verrekende_kosten ?? null,
     eindbedrag: e.eindbedrag ?? null,
     controle_status: e.controle_status,
@@ -57,47 +57,43 @@ export async function POST(request: NextRequest) {
   const { data: doc } = await supabase.from("documents").select("id, file_url").eq("id", documentId).eq("user_id", user.id).maybeSingle();
   if (!doc) return NextResponse.json({ error: "Document niet gevonden." }, { status: 404 });
 
-  const { data: txRijen, error: txFout } = await supabase
-    .from("transactions")
-    .select("id, type, leverancier, factuurnummer, factuurdatum, bedrag_incl_btw, bedrag_excl_btw, btw_bedrag, btw_percentage, btw_regels")
-    .eq("user_id", user.id)
-    .eq("document_id", documentId);
+  const kolommen = "id, type, leverancier, factuurnummer, factuurdatum, bedrag_incl_btw, bedrag_excl_btw, btw_bedrag, btw_percentage, btw_regels";
+  const haalTxs = (metIngehouden: boolean) => supabase.from("transactions").select((metIngehouden ? kolommen + ", ingehouden_op" : kolommen) as "*").eq("user_id", user.id).eq("document_id", documentId);
+  let { data: txRijen, error: txFout } = await haalTxs(true);
+  // Zonder migratie 0011 bestaat de kolom ingehouden_op nog niet: dan zonder die kolom verder
+  if (txFout && /ingehouden_op/i.test(txFout.message)) ({ data: txRijen, error: txFout } = await haalTxs(false));
   if (txFout) return NextResponse.json({ error: "Boekingen ophalen is mislukt." }, { status: 500 });
   if (!txRijen || txRijen.length === 0) return NextResponse.json({ error: "Dit document heeft geen boeking." }, { status: 404 });
 
-  const txs: OpgeslagenTx[] = txRijen.map((t) => ({
-    id: t.id,
-    type: t.type,
-    leverancier: t.leverancier,
-    factuurnummer: t.factuurnummer,
-    factuurdatum: t.factuurdatum,
-    bedrag_incl_btw: Number(t.bedrag_incl_btw),
-    bedrag_excl_btw: Number(t.bedrag_excl_btw),
-    btw_bedrag: Number(t.btw_bedrag),
-    btw_percentage: Number(t.btw_percentage),
-    heeftBtwRegels: Array.isArray(t.btw_regels) && t.btw_regels.length >= 2,
-  }));
+  const txs: OpgeslagenTx[] = (txRijen as unknown as Parameters<typeof txUitRij>[0][]).map(txUitRij);
 
-  const { data: profiel } = await supabase.from("profiles").select("bedrijfsnaam, activiteiten").eq("user_id", user.id).single();
+  const { data: profiel } = await supabase.from("profiles").select("bedrijfsnaam, activiteiten, kvk_nummer, btw_nummer").eq("user_id", user.id).single();
 
   const uitkomst = await leesBestandUitOpslag(supabase, doc.file_url);
-  let rij: { uitslag: string; bevindingen: unknown; scan_meldingen: string[]; scan_onzeker: boolean };
+  let rij: { uitslag: string; bevindingen: unknown; scan_meldingen: string[]; scan_onzeker: boolean; scan?: ScanUitkomst | null };
   if ("fout" in uitkomst) {
     rij = { uitslag: "mislukt", bevindingen: [], scan_meldingen: [uitkomst.fout], scan_onzeker: true };
   } else {
     let scan: ExtractedInvoiceData;
     try {
-      scan = await scanDocument({ bestand: uitkomst.bestand, eigenBedrijfsnaam: profiel?.bedrijfsnaam ?? "", activiteiten: profiel?.activiteiten ?? "" });
+      scan = await scanDocument({ bestand: uitkomst.bestand, eigenBedrijfsnaam: profiel?.bedrijfsnaam ?? "", activiteiten: profiel?.activiteiten ?? "", eigenKvk: profiel?.kvk_nummer ?? null, eigenBtw: profiel?.btw_nummer ?? null });
     } catch (err) {
       console.error("Controle-scan mislukt:", err);
       scan = nietGeverifieerd("De scan is niet gelukt.");
     }
     const resultaat = vergelijkDocument(txs, naarScanUitkomst(scan));
-    rij = { uitslag: resultaat.uitslag, bevindingen: resultaat.bevindingen, scan_meldingen: resultaat.scanMeldingen, scan_onzeker: resultaat.scanOnzeker };
+    rij = { uitslag: resultaat.uitslag, bevindingen: resultaat.bevindingen, scan_meldingen: resultaat.scanMeldingen, scan_onzeker: resultaat.scanOnzeker, scan: naarScanUitkomst(scan) };
   }
 
   const volledig = { document_id: documentId, user_id: user.id, ...rij, gecontroleerd_op: new Date().toISOString(), afgehandeld: [] as string[] };
-  const { error: opslagFout } = await supabase.from("document_controles").upsert(volledig);
+  // De bewaarde scan maakt het mogelijk de verschillen steeds opnieuw te berekenen (migratie 0011). Ontbreekt die kolom
+  // nog, dan bewaren we het resultaat zonder.
+  let { error: opslagFout } = await supabase.from("document_controles").upsert(volledig);
+  if (opslagFout && /scan/i.test(opslagFout.message)) {
+    const { scan: _scan, ...zonderScan } = volledig as typeof volledig & { scan?: unknown };
+    void _scan;
+    ({ error: opslagFout } = await supabase.from("document_controles").upsert(zonderScan));
+  }
   if (opslagFout) return NextResponse.json({ error: "Resultaat bewaren is mislukt." }, { status: 500 });
   return NextResponse.json({ data: volledig });
 }

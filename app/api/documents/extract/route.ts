@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("bedrijfsnaam, activiteiten")
+    .select("bedrijfsnaam, activiteiten, kvk_nummer, btw_nummer")
     .eq("user_id", user.id)
     .single();
 
@@ -56,6 +56,8 @@ export async function POST(request: NextRequest) {
       bestand: contentBlock,
       eigenBedrijfsnaam: profile?.bedrijfsnaam ?? "",
       activiteiten: profile?.activiteiten ?? "",
+      eigenKvk: profile?.kvk_nummer ?? null,
+      eigenBtw: profile?.btw_nummer ?? null,
     });
   } catch (err) {
     console.error("Scannen mislukt:", err);

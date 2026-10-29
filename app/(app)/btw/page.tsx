@@ -6,6 +6,7 @@ import { aggregateTransactions, getPeriodBounds, type PeriodType } from "@/lib/f
 import { laadTransacties } from "@/lib/transactionsDb";
 import { berekenAangifte, uiterlijkeDatum, type AangifteTransactie } from "@/lib/btwAangifte";
 import { formatDateInput } from "@/lib/format";
+import { periodeSleutel } from "@/lib/controlePeriodes";
 import type { Profile, Transaction } from "@/lib/types";
 
 export default async function BtwPage({ searchParams }: { searchParams: Promise<{ periode?: string; ref?: string }> }) {
@@ -35,6 +36,27 @@ export default async function BtwPage({ searchParams }: { searchParams: Promise<
     console.error("BTW-modus wijkt af van dashboard-BTW-saldo", { periode: label, dashboardSaldo, btwModus: aangifte.subtotaal });
   }
 
+  // Hoeveel documenten in dit tijdvak zijn met de nieuwste scan gecontroleerd? Zonder de controle-tabel tonen we niets.
+  const docIds = [...new Set(transacties.map((t) => t.document_id).filter((id): id is string => !!id))];
+  let controle: { documenten: number; gecontroleerd: number; href: string } | null = null;
+  if (docIds.length > 0) {
+    let gecontroleerd = 0;
+    let bekend = true;
+    for (let i = 0; i < docIds.length && bekend; i += 100) {
+      const deel = docIds.slice(i, i + 100);
+      const metScan = await supabase.from("document_controles").select("document_id, scan").eq("user_id", user!.id).in("document_id", deel);
+      if (!metScan.error) {
+        gecontroleerd += (metScan.data ?? []).filter((r) => r.scan != null).length;
+        continue;
+      }
+      // Zonder migratie 0011 bestaat de kolom scan nog niet: dan tellen we alle uitkomsten
+      const zonderScan = await supabase.from("document_controles").select("document_id").eq("user_id", user!.id).in("document_id", deel);
+      if (zonderScan.error) bekend = false;
+      else gecontroleerd += (zonderScan.data ?? []).length;
+    }
+    if (bekend) controle = { documenten: docIds.length, gecontroleerd, href: `/controle?periode=${periodeSleutel(periodType, formatDateInput(start))}` };
+  }
+
   const uiterlijk = uiterlijkeDatum(periodType, end);
   const periodeLoopt = end >= new Date();
 
@@ -55,7 +77,7 @@ export default async function BtwPage({ searchParams }: { searchParams: Promise<
         </div>
       </div>
 
-      <BtwModus aangifte={aangifte} periodeLabel={label} uiterlijk={uiterlijk} periodeLoopt={periodeLoopt} />
+      <BtwModus aangifte={aangifte} periodeLabel={label} uiterlijk={uiterlijk} periodeLoopt={periodeLoopt} controle={controle} />
 
       <p className="text-[11.5px] leading-relaxed text-muted">
         Indicatie op basis van de facturen die je hebt toegevoegd — geen officiële BTW-aangifte en geen vervanging voor een boekhouder. Controleer bij twijfel altijd je eigen administratie.

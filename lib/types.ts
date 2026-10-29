@@ -110,6 +110,8 @@ export interface Transaction {
   btw_percentage: number;
   // Alleen gevuld bij 2 of meer BTW-tarieven; de bedragen hierboven zijn dan de totalen (som van de regels).
   btw_regels: BtwRegel[] | null;
+  // Als dit een kost is die op een verkoopfactuur is ingehouden (factoring e.d.): de id van die factuur.
+  ingehouden_op?: string | null;
   type: TransactieType;
   categorie: string;
   risico: RisicoNiveau;

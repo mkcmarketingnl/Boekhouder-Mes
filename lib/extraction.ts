@@ -25,7 +25,11 @@ type Bestand = Anthropic.Messages.ContentBlockParam;
 
 interface Transcriptie {
   afzender_naam: string | null;
+  afzender_kvk?: string | null;
+  afzender_btw?: string | null;
   geadresseerde_naam: string | null;
+  geadresseerde_kvk?: string | null;
+  geadresseerde_btw?: string | null;
   factuurnummer: string | null;
   factuurdatum: string | null;
   totaal_incl_btw: number | null;
@@ -61,7 +65,29 @@ const zelfdeNummer = (a: string, b: string) =>
   a.toLowerCase().replace(/[^a-z0-9]/g, "") === b.toLowerCase().replace(/[^a-z0-9]/g, "");
 const zelfdePercentage = (a: number, b: number) => Math.abs(a - b) < 0.5;
 
-function typeUitTranscriptie(t: Transcriptie, eigen: string): TransactieType | null {
+export interface EigenIds {
+  kvk?: string | null;
+  btw?: string | null;
+}
+
+const sleutel = (s: string | null | undefined) => (s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+// Staat het KVK- of BTW-nummer van de ondernemer bij deze partij? Nummers zijn betrouwbaarder dan namen.
+export function heeftEigenNummer(ids: EigenIds, kvk: string | null | undefined, btw: string | null | undefined): boolean {
+  const eigenKvk = sleutel(ids.kvk);
+  const eigenBtw = sleutel(ids.btw);
+  const k = sleutel(kvk);
+  const b = sleutel(btw);
+  return (eigenKvk.length >= 8 && k === eigenKvk) || (eigenBtw.length >= 8 && b === eigenBtw);
+}
+
+function typeUitTranscriptie(t: Transcriptie, eigen: string, ids: EigenIds = {}): TransactieType | null {
+  // 1. Nummers: staat jouw KVK- of BTW-nummer bij de afzender, dan is het omzet; bij de klant, dan kosten.
+  const afzenderNummer = heeftEigenNummer(ids, t.afzender_kvk, t.afzender_btw);
+  const klantNummer = heeftEigenNummer(ids, t.geadresseerde_kvk, t.geadresseerde_btw);
+  if (afzenderNummer && !klantNummer) return "omzet";
+  if (klantNummer && !afzenderNummer) return "kosten";
+  // 2. Namen (soepel, want een handelsnaam wijkt vaak licht af)
   const afzender = lijktOpEigenBedrijf(eigen, t.afzender_naam);
   const geadresseerde = lijktOpEigenBedrijf(eigen, t.geadresseerde_naam);
   if (afzender && !geadresseerde) return "omzet";
@@ -230,11 +256,11 @@ interface Analyse {
   verrekend: Stem<string>;
 }
 
-export function analyseer(a: ExtractedInvoiceData, tr: { bron: Bron; t: Transcriptie | null }[], eigen: string): Analyse {
+export function analyseer(a: ExtractedInvoiceData, tr: { bron: Bron; t: Transcriptie | null }[], eigen: string, ids: EigenIds = {}): Analyse {
   const typeStem = stem<TransactieType>(
     [
       { bron: "scan 1", waarde: a.type },
-      ...tr.map(({ bron, t }) => ({ bron, waarde: t ? typeUitTranscriptie(t, eigen) : null })),
+      ...tr.map(({ bron, t }) => ({ bron, waarde: t ? typeUitTranscriptie(t, eigen, ids) : null })),
     ],
     zelfdeTekst,
     true // "geen oordeel" is geen tegenspraak
@@ -301,9 +327,12 @@ export async function scanDocument(params: {
   bestand: Bestand;
   eigenBedrijfsnaam: string;
   activiteiten: string;
+  eigenKvk?: string | null;
+  eigenBtw?: string | null;
 }): Promise<ExtractedInvoiceData> {
   const { bestand, eigenBedrijfsnaam, activiteiten } = params;
-  const extractieSysteem = buildExtractionSystemPrompt(eigenBedrijfsnaam, activiteiten);
+  const ids: EigenIds = { kvk: params.eigenKvk, btw: params.eigenBtw };
+  const extractieSysteem = buildExtractionSystemPrompt(eigenBedrijfsnaam, activiteiten, params.eigenKvk, params.eigenBtw);
 
   const [aRuw, bRuw] = await Promise.all([
     leesJson<ExtractedInvoiceData>(CLAUDE_MODEL_EXTRACT, extractieSysteem, bestand, buildExtractionUserPrompt()),
@@ -315,14 +344,14 @@ export async function scanDocument(params: {
   if (!a) return nietGeverifieerd("De scan is niet gelukt.");
 
   let transcripties: { bron: Bron; t: Transcriptie | null }[] = [{ bron: "scan 2", t: bRuw }];
-  let analyse = analyseer(a, transcripties, eigenBedrijfsnaam);
+  let analyse = analyseer(a, transcripties, eigenBedrijfsnaam, ids);
 
   let arbiterGedraaid = false;
   if (!bRuw || heeftVerschil(analyse)) {
     const cRuw = await leesJson<Transcriptie>(CLAUDE_MODEL_ARBITER, TRANSCRIPTIE_SYSTEM_PROMPT, bestand, TRANSCRIPTIE_VRAAG);
     arbiterGedraaid = true;
     transcripties = [...transcripties, { bron: "controlescan", t: cRuw }];
-    analyse = analyseer(a, transcripties, eigenBedrijfsnaam);
+    analyse = analyseer(a, transcripties, eigenBedrijfsnaam, ids);
   }
 
   const afwijkingen: string[] = [];

@@ -1,32 +1,47 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { ControleBeheer, type ControleDoc, type ControleRij } from "@/components/controle/ControleBeheer";
 import { laadTransacties } from "@/lib/transactionsDb";
 import { isTabelOntbreekt, vandaagNl } from "@/lib/facturen";
+import { alleKeuzes, inPeriode, standaardPeriode, vindPeriode, periodeOpties } from "@/lib/controlePeriodes";
+import { snelleControles, type SnelleTx } from "@/lib/snelleControles";
+import { txUitRij } from "@/lib/administratiecontrole";
+import type { Profile } from "@/lib/types";
 
-interface TxMetDoc {
+interface TxRij {
   id: string;
   document_id: string | null;
   type: "kosten" | "omzet";
   leverancier: string;
+  factuurnummer: string | null;
   factuurdatum: string;
   bedrag_incl_btw: number;
+  bedrag_excl_btw: number;
+  btw_bedrag: number;
+  btw_percentage: number;
+  btw_regels: { percentage: number; bedrag_incl_btw: number }[] | null;
+  categorie: string;
+  invoerwijze: "ai" | "handmatig";
+  ingehouden_op?: string | null;
   documents: { file_url: string } | { file_url: string }[] | null;
 }
 
-export default async function ControlePage({ searchParams }: { searchParams: Promise<{ jaar?: string }> }) {
-  const { jaar: jaarParam } = await searchParams;
+const KOLOMMEN = "id, document_id, type, leverancier, factuurnummer, factuurdatum, bedrag_incl_btw, bedrag_excl_btw, btw_bedrag, btw_percentage, btw_regels, categorie, invoerwijze, documents(file_url)";
+
+export default async function ControlePage({ searchParams }: { searchParams: Promise<{ periode?: string }> }) {
+  const { periode: periodeParam } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const huidig = Number(vandaagNl().slice(0, 4));
+  const vandaag = vandaagNl();
+  const { data: profileRij } = await supabase.from("profiles").select("aangiftetijdvak").eq("user_id", user!.id).single();
+  const tijdvak = (profileRij as Pick<Profile, "aangiftetijdvak"> | null)?.aangiftetijdvak ?? "kwartaal";
 
   const header = (
     <div>
       <h1 className="display text-2xl font-semibold">Administratiecontrole</h1>
-      <p className="mt-1 text-sm leading-relaxed text-muted">Controleer of wat je eerder hebt geüploade nog klopt met de originele documenten.</p>
+      <p className="mt-1 text-sm leading-relaxed text-muted">Controleer per tijdvak of wat je hebt opgeslagen klopt met de originele documenten, bijvoorbeeld vlak voor je BTW-aangifte.</p>
     </div>
   );
 
@@ -45,50 +60,77 @@ export default async function ControlePage({ searchParams }: { searchParams: Pro
     );
   }
 
-  const transacties = await laadTransacties<TxMetDoc>(supabase, user!.id, { select: "id, document_id, type, leverancier, factuurdatum, bedrag_incl_btw, documents(file_url)" });
-
-  // Eén regel per document: de grootste boeking bepaalt hoe het document in de lijst heet
-  const perDoc = new Map<string, TxMetDoc[]>();
-  for (const t of transacties) {
-    if (!t.document_id) continue;
-    perDoc.set(t.document_id, [...(perDoc.get(t.document_id) ?? []), t]);
+  // Alle boekingen; zonder migratie 0011 bestaat de kolom ingehouden_op nog niet
+  let transacties: TxRij[];
+  try {
+    transacties = await laadTransacties<TxRij>(supabase, user!.id, { select: KOLOMMEN + ", ingehouden_op" });
+  } catch {
+    transacties = await laadTransacties<TxRij>(supabase, user!.id, { select: KOLOMMEN });
   }
-  const alleDocs: (ControleDoc & { jaren: string[] })[] = [];
+
+  // Het jaar waarin je boekingen staan bepaalt welke jaren je kunt kiezen
+  const jaren = [...new Set(transacties.map((t) => t.factuurdatum.slice(0, 4)))];
+  const keuzes = alleKeuzes(tijdvak, vandaag, jaren);
+  const gekozen = vindPeriode(keuzes, periodeParam) ?? vindPeriode(keuzes, standaardPeriode(periodeOpties(tijdvak, vandaag)))!;
+
+  // Eén regel per document: de grootste boeking (zonder ingehouden kosten) bepaalt hoe het document heet
+  const perDoc = new Map<string, TxRij[]>();
+  for (const t of transacties) if (t.document_id) perDoc.set(t.document_id, [...(perDoc.get(t.document_id) ?? []), t]);
+  const docs: ControleDoc[] = [];
   for (const [documentId, txs] of perDoc) {
-    const grootste = [...txs].sort((a, b) => Number(b.bedrag_incl_btw) - Number(a.bedrag_incl_btw))[0];
-    const d = grootste.documents;
+    if (!txs.some((t) => inPeriode(t.factuurdatum, gekozen) || gekozen.sleutel === "alle")) continue;
+    const hoofd = [...txs].filter((t) => !t.ingehouden_op).sort((a, b) => Number(b.bedrag_incl_btw) - Number(a.bedrag_incl_btw))[0] ?? txs[0];
+    const d = hoofd.documents;
     const fileUrl = Array.isArray(d) ? d[0]?.file_url : d?.file_url;
     if (!fileUrl) continue;
-    alleDocs.push({ documentId, fileUrl, titel: grootste.leverancier, datum: grootste.factuurdatum, bedrag: Number(grootste.bedrag_incl_btw), type: grootste.type, jaren: [...new Set(txs.map((t) => t.factuurdatum.slice(0, 4)))] });
+    docs.push({ documentId, fileUrl, titel: hoofd.leverancier, datum: hoofd.factuurdatum, bedrag: Number(hoofd.bedrag_incl_btw), type: hoofd.type, txs: txs.map(txUitRij) });
   }
-  alleDocs.sort((a, b) => (a.datum < b.datum ? 1 : a.datum > b.datum ? -1 : 0));
+  docs.sort((a, b) => (a.datum < b.datum ? 1 : a.datum > b.datum ? -1 : 0));
 
-  const jaren = [...new Set(alleDocs.flatMap((d) => d.jaren))].sort().reverse();
-  const gekozen = jaarParam === "alle" ? "alle" : jaarParam && jaren.includes(jaarParam) ? jaarParam : jaren.includes(String(huidig)) ? String(huidig) : (jaren[0] ?? "alle");
-  const docs: ControleDoc[] = alleDocs.filter((d) => gekozen === "alle" || d.jaren.includes(gekozen)).map(({ jaren: _j, ...rest }) => (void _j, rest));
-
-  // Bewaarde uitkomsten van deze documenten (in delen van 1.000, zodat er nooit iets wegvalt)
+  // Bewaarde uitkomsten (in delen van 1.000, zodat er nooit iets wegvalt); met de bewaarde scan als migratie 0011 is gedraaid
   const ids = new Set(docs.map((d) => d.documentId));
   const controles: ControleRij[] = [];
   for (let van = 0; van < 50000; van += 1000) {
     const { data } = await supabase.from("document_controles").select("*").eq("user_id", user!.id).order("document_id", { ascending: true }).range(van, van + 999);
-    for (const r of (data ?? []) as ControleRij[]) if (ids.has(r.document_id)) controles.push(r);
+    for (const r of (data ?? []) as ControleRij[]) if (ids.has(r.document_id)) controles.push({ ...r, scan: r.scan ?? null });
     if (!data || data.length < 1000) break;
   }
+  // Is de kolom `scan` er? Zo niet, dan kunnen oude uitkomsten niet opnieuw berekend worden (migratie 0011).
+  const { error: scanKolomFout } = await supabase.from("document_controles").select("scan").limit(1);
+  const heeftScanKolom = !scanKolomFout;
+
+  // Snelle controles op de boekingen van dit tijdvak
+  const inTijdvak = transacties.filter((t) => gekozen.sleutel === "alle" || inPeriode(t.factuurdatum, gekozen));
+  const snelle: SnelleTx[] = inTijdvak.map((t) => ({
+    id: t.id,
+    type: t.type,
+    leverancier: t.leverancier,
+    factuurnummer: t.factuurnummer,
+    factuurdatum: t.factuurdatum,
+    bedrag_incl_btw: Number(t.bedrag_incl_btw),
+    categorie: t.categorie,
+    btw_percentage: Number(t.btw_percentage),
+    heeftBtwRegels: Array.isArray(t.btw_regels) && t.btw_regels.length >= 2,
+    invoerwijze: t.invoerwijze,
+    document_id: t.document_id,
+    ingehouden_op: t.ingehouden_op ?? null,
+  }));
 
   return (
     <div className="fade-in space-y-6">
       {header}
-      {jaren.length > 0 && (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Jaar">
-          {[...jaren, "alle"].map((j) => (
-            <Link key={j} href={`/controle?jaar=${j}`} aria-current={gekozen === j ? "true" : undefined} className={`inline-flex min-h-11 items-center rounded-full border px-4 text-sm font-medium ${gekozen === j ? "border-ink bg-ink text-paper" : "border-line bg-white text-muted hover:text-ink"}`}>
-              {j === "alle" ? "Alle jaren" : j}
-            </Link>
-          ))}
-        </div>
-      )}
-      <ControleBeheer key={gekozen} userId={user!.id} docs={docs} startControles={controles} />
+      <ControleBeheer
+        key={gekozen.sleutel}
+        userId={user!.id}
+        tijdvak={tijdvak}
+        keuzes={keuzes.map((k) => ({ sleutel: k.sleutel, label: k.label, isAangifte: !!k.isAangifte }))}
+        gekozen={{ sleutel: gekozen.sleutel, label: gekozen.label, begin: gekozen.begin, isAangifte: !!gekozen.isAangifte }}
+        docs={docs}
+        startControles={controles}
+        heeftScanKolom={heeftScanKolom}
+        snel={snelleControles(snelle)}
+        aantalBoekingen={inTijdvak.length}
+      />
     </div>
   );
 }

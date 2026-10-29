@@ -68,20 +68,33 @@ export default async function DashboardPage({
   ] = await Promise.all([
     laadTransacties(supabase, user!.id, { van: formatDateInput(start), tot: formatDateInput(end) }).then((data) => ({ data })),
     laadTransacties(supabase, user!.id, { van: formatDateInput(trendStart) }).then((data) => ({ data })),
-    supabase
-      .from("transactions")
-      .select("*, documents(file_url)", { count: "exact" })
-      .eq("user_id", user!.id)
-      .gte("factuurdatum", formatDateInput(start))
-      .lte("factuurdatum", formatDateInput(end))
-      .order("factuurdatum", { ascending: false })
-      .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
+    (async () => {
+      const pagina = (zonderIngehouden: boolean) => {
+        const q = supabase
+          .from("transactions")
+          .select("*, documents(file_url)", { count: "exact" })
+          .eq("user_id", user!.id)
+          .gte("factuurdatum", formatDateInput(start))
+          .lte("factuurdatum", formatDateInput(end));
+        return (zonderIngehouden ? q.is("ingehouden_op", null) : q).order("factuurdatum", { ascending: false }).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+      };
+      const eerst = await pagina(true);
+      // Zonder migratie 0011 bestaat de kolom niet: dan gewoon alles tonen
+      return eerst.error && /ingehouden_op/i.test(eerst.error.message) ? await pagina(false) : eerst;
+    })(),
     laadTransacties(supabase, user!.id, { van: formatDateInput(yearStart), tot: formatDateInput(yearEnd) }).then((data) => ({ data })),
   ]);
 
   const snapshot = aggregateTransactions((periodTransactions ?? []) as Transaction[]);
   const trend = groupMonthlyTrend((trendTransactions ?? []) as Transaction[]);
   const rows = (pagedTransactions ?? []) as unknown as TransactionWithDoc[];
+  // Ingehouden kosten (factoring e.d.) staan bij hun factuur: haal ze op voor de facturen op deze pagina
+  if (rows.length > 0) {
+    const { data: ingehouden, error: ingehoudenFout } = await supabase.from("transactions").select("*").eq("user_id", user!.id).in("ingehouden_op", rows.map((r) => r.id));
+    if (!ingehoudenFout) {
+      for (const r of rows) r.ingehouden = ((ingehouden ?? []) as Transaction[]).filter((k) => k.ingehouden_op === r.id);
+    }
+  }
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
 
   const yearSnapshot = aggregateTransactions((yearTransactions ?? []) as Transaction[]);
